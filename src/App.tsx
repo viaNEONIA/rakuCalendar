@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS } from "./domain/event";
 import type { CalendarEvent, CalendarSettings } from "./domain/event";
 import { makeBackup, parseBackup } from "./domain/backup";
 import type { CalendarBackup } from "./domain/backup";
-import { changeEventTime, dayEvents, dateFromKey, dayKey, getNextEvent, layoutOverlaps, localDateTime, snapMinutes } from "./domain/time";
+import { changeEventTime, dayEvents, dateFromKey, dayKey, getNextEvent, layoutOverlaps, localDateTime, pointerScrollDelta, snapMinutes } from "./domain/time";
 import type { DragMode } from "./domain/time";
 import { deleteEvent, getSettings, listEvents, restoreData, saveEvent, saveSettings } from "./storage/database";
 
@@ -18,6 +18,7 @@ interface DragSeed {
   pointerId: number;
   capture: HTMLElement;
   timer?: number;
+  scrolling?: boolean;
 }
 
 interface DragPreview extends DragSeed {
@@ -103,11 +104,11 @@ export function App() {
     const timeline = timelineRef.current;
     const seed: DragSeed = { event, mode, clientY: e.clientY, scrollTop: timeline?.scrollTop ?? 0, pointerId: e.pointerId, capture: e.currentTarget };
     dragSeed.current = seed;
+    try { seed.capture.setPointerCapture(seed.pointerId); } catch { /* capture may be unavailable */ }
     const activate = () => {
       const next: DragPreview = { ...seed, preview: event };
       dragRef.current = next;
       setDragPreview(next);
-      try { seed.capture.setPointerCapture(seed.pointerId); } catch { /* pointer may already have ended */ }
     };
     if (mode !== "move") activate();
     else seed.timer = window.setTimeout(activate, 320);
@@ -117,9 +118,13 @@ export function App() {
     const seed = dragSeed.current;
     const current = dragRef.current;
     if (!current && seed) {
-      if (Math.abs(e.clientY - seed.clientY) > 8) {
+      const movement = e.clientY - seed.clientY;
+      if (seed.scrolling || Math.abs(movement) > 8) {
         if (seed.timer) window.clearTimeout(seed.timer);
-        dragSeed.current = null;
+        if (!seed.scrolling) suppressClick.current = true;
+        const timeline = timelineRef.current;
+        if (timeline) timeline.scrollTop += pointerScrollDelta(seed.clientY, e.clientY);
+        dragSeed.current = { ...seed, clientY: e.clientY, scrollTop: timeline?.scrollTop ?? seed.scrollTop, scrolling: true, timer: undefined };
       }
       return;
     }
@@ -142,7 +147,10 @@ export function App() {
     dragSeed.current = null;
     dragRef.current = null;
     setDragPreview(null);
-    if (!current || e.pointerId !== current.pointerId) return;
+    if (!current || e.pointerId !== current.pointerId) {
+      if (seed?.scrolling) window.setTimeout(() => { suppressClick.current = false; }, 0);
+      return;
+    }
     suppressClick.current = true;
     window.setTimeout(() => { suppressClick.current = false; }, 0);
     const after = { ...current.preview, updatedAt: new Date().toISOString() };
