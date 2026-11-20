@@ -5,7 +5,7 @@ import type { CalendarEvent, CalendarSettings } from "./domain/event";
 import { makeBackup, parseBackup } from "./domain/backup";
 import type { CalendarBackup } from "./domain/backup";
 import { createICalendar } from "./domain/ical";
-import { changeEventTime, dayEvents, dateFromKey, dayKey, EVENT_TIME_INCREMENT_MINUTES, getNextEvent, layoutOverlaps, localDateTime, nearestQuarterHourMinute, defaultEventRange, hasPointerScrollIntent, pointerScrollDelta, snapMinutes } from "./domain/time";
+import { changeEventTime, dayEvents, dateFromKey, dayKey, EVENT_TIME_INCREMENT_MINUTES, getNextEvent, layoutOverlaps, localDateTime, nearestQuarterHourMinute, defaultEventRange, hasPointerScrollIntent, nextAvailableEventRange, nextScheduledDay, pointerScrollDelta, resolveDragOverlaps, snapMinutes } from "./domain/time";
 import type { DragMode } from "./domain/time";
 import { deleteEvent, getSettings, listEvents, restoreData, saveEvent, saveSettings } from "./storage/database";
 
@@ -26,8 +26,8 @@ interface DragPreview extends DragSeed {
   preview: CalendarEvent;
 }
 
-function makeInitialEvent(day: Date, now: Date): CalendarEvent {
-  const { start, end } = defaultEventRange(day, now);
+function makeInitialEvent(day: Date, now: Date, events: CalendarEvent[]): CalendarEvent {
+  const { start, end } = defaultEventRange(day, now, events);
   return {
     id: crypto.randomUUID(), title: "", destination: "", startAt: localDateTime(start), endAt: localDateTime(end),
     memo: "", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
@@ -140,7 +140,8 @@ export function App() {
     if (e.clientY < bounds.top + 64) timeline.scrollTop -= 10;
     else if (e.clientY > bounds.bottom - 64) timeline.scrollTop += 10;
     const delta = snapMinutes(e.clientY - current.clientY + timeline.scrollTop - current.scrollTop, HOUR_HEIGHT, EVENT_TIME_INCREMENT_MINUTES);
-    const updated = { ...current, preview: changeEventTime(current.event, current.mode, delta, EVENT_TIME_INCREMENT_MINUTES) };
+    const proposed = changeEventTime(current.event, current.mode, delta, EVENT_TIME_INCREMENT_MINUTES);
+    const updated = { ...current, preview: resolveDragOverlaps(current.event, proposed, current.mode, events.filter((event) => event.id !== current.event.id)) };
     dragRef.current = updated;
     setDragPreview(updated);
   }
@@ -277,6 +278,7 @@ export function App() {
   const colorOptions = editing?.color && !EVENT_COLOR_PALETTE.some((color) => color.value.toLowerCase() === editing.color?.toLowerCase())
     ? [...EVENT_COLOR_PALETTE, { name: "現在の色", value: editing.color }]
     : EVENT_COLOR_PALETTE;
+  const nextScheduleDate = nextScheduledDay(events, selectedDay);
 
   return <div className={`app-shell${mode === "edit" ? " is-edit-mode" : ""}`}>
     <header className="topbar">
@@ -294,6 +296,7 @@ export function App() {
         <button className="icon-button" aria-label="翌日" onClick={() => changeDay(1)}>›</button>
         <button className="today-button" onClick={() => setSelectedDay(dayKey(new Date()))}>今日</button>
       </div>
+      {nextScheduleDate && <div className="scheduled-day-row"><button className="scheduled-day-button" onClick={() => setSelectedDay(nextScheduleDate)}>次の予定がある日へ · {dateFromKey(nextScheduleDate).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric", weekday: "short" })}</button></div>}
     </header>
 
     {settings.showNextEvent && <section className="next-card" onClick={jumpToNext} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); jumpToNext(); } }} role="button" tabIndex={0} aria-label="次の予定へ移動">
@@ -310,9 +313,9 @@ export function App() {
       const minute = Math.max(settings.displayStartHour * 60, Math.min(settings.displayEndHour * 60 - 30, snappedMinute));
       const start = dateFromKey(selectedDay);
       start.setHours(Math.floor(minute / 60), minute % 60, 0, 0);
-      const end = new Date(start.getTime() + 30 * 60_000);
-      const created = makeInitialEvent(dateFromKey(selectedDay), start);
-      created.startAt = localDateTime(start);
+      const { start: availableStart, end } = nextAvailableEventRange(start, events);
+      const created = makeInitialEvent(dateFromKey(selectedDay), availableStart, []);
+      created.startAt = localDateTime(availableStart);
       created.endAt = localDateTime(end);
       setEditing(created);
     }}>
@@ -352,7 +355,7 @@ export function App() {
       {visibleEvents.length === 0 && <p className="empty-day">{mode === "edit" ? "空き時間をタップするか、右下の＋から予定を追加できます。" : "この日に予定はありません。予定を追加するには編集モードに切り替えてください。"}</p>}
     </main>
     <button className="now-button" aria-label="現在時刻へ" onClick={() => { if (timelineRef.current) timelineRef.current.scrollTo({ top: Math.max(0, (nowMinutes - settings.displayStartHour * 60) * HOUR_HEIGHT / 60 - 36), behavior: "smooth" }); }}>今</button>
-    {mode === "edit" && <button className="add-button" aria-label="予定を追加" onClick={() => setEditing(makeInitialEvent(dateFromKey(selectedDay), new Date()))}>＋</button>}
+    {mode === "edit" && <button className="add-button" aria-label="予定を追加" onClick={() => setEditing(makeInitialEvent(dateFromKey(selectedDay), new Date(), events))}>＋</button>}
     {undoVisible && <div className="undo-bar" role="status"><span>時間を変更しました</span><button onClick={() => void travelHistory("undo")} disabled={historyIndex.current <= 0}>元に戻す</button><button onClick={() => void travelHistory("redo")} disabled={historyIndex.current >= history.current.length}>やり直す</button></div>}
 
     {settingsOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) { setSettingsOpen(false); setBackupPreview(null); } }}><section className="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
@@ -373,7 +376,7 @@ export function App() {
     {viewingEvent && <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setViewingEvent(null); }}><section className="event-dialog" role="dialog" aria-modal="true" aria-labelledby="view-event-title"><div className="dialog-head"><h2 id="view-event-title">予定の詳細</h2><button className="icon-button" onClick={() => setViewingEvent(null)} aria-label="閉じる">×</button></div><div className="event-details"><strong>{viewingEvent.title}</strong><p>{new Date(viewingEvent.startAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" })}–{formatTime(viewingEvent.endAt)}</p>{viewingEvent.destination && <p>行先: {viewingEvent.destination}</p>}{viewingEvent.memo && <p className="event-detail-memo">{viewingEvent.memo}</p>}<button className="secondary-button settings-done" onClick={() => setViewingEvent(null)}>閉じる</button></div></section></div>}
 
     {editing && <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setEditing(null); }}><section className="event-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div className="dialog-head"><h2 id="dialog-title">{events.some((e) => e.id === editing.id) ? "予定を編集" : "予定を追加"}</h2><button className="icon-button" onClick={() => setEditing(null)} aria-label="閉じる">×</button></div>
-      <form onSubmit={submitForm} className="event-form"><label>予定内容<input name="title" required maxLength={120} autoFocus defaultValue={editing.title} /></label><label>行先（任意）<input name="destination" maxLength={120} defaultValue={editing.destination} /></label><div className="form-row"><label>開始<input name="startAt" type="datetime-local" step={events.some((e) => e.id === editing.id) ? 60 : 900} required defaultValue={localDateTime(new Date(editing.startAt))} /></label><label>終了<input name="endAt" type="datetime-local" step={events.some((e) => e.id === editing.id) ? 60 : 900} required defaultValue={localDateTime(new Date(editing.endAt))} /></label></div><fieldset className="color-palette"><legend>予定の色</legend><div className="color-swatch-grid">{colorOptions.map((color) => <label className="color-swatch" key={color.value}><input type="radio" name="color" value={color.value} defaultChecked={color.value.toLowerCase() === (editing.color ?? DEFAULT_EVENT_COLOR).toLowerCase()} /><span className="color-swatch-chip" style={{ "--swatch-color": color.value } as CSSProperties} /><small>{color.name}</small></label>)}</div></fieldset><label>メモ（任意）<textarea name="memo" rows={3} maxLength={2000} defaultValue={editing.memo} /></label><div className="form-actions">{events.some((e) => e.id === editing.id) && <button type="button" className="delete-button" onClick={() => void remove(editing.id)}>削除</button>}<button type="button" className="secondary-button" onClick={() => setEditing(null)}>キャンセル</button><button type="submit" className="save-button">保存</button></div></form>
+      <form onSubmit={submitForm} className="event-form"><label>予定内容<input name="title" required maxLength={120} autoFocus defaultValue={editing.title} /></label><label>行先（任意）<input name="destination" maxLength={120} defaultValue={editing.destination} /></label><div className="form-row"><label>開始<input name="startAt" type="datetime-local" step={events.some((e) => e.id === editing.id) ? 60 : 900} required defaultValue={localDateTime(new Date(editing.startAt))} /></label><label>終了<input name="endAt" type="datetime-local" step={events.some((e) => e.id === editing.id) ? 60 : 900} required defaultValue={localDateTime(new Date(editing.endAt))} /></label></div><p className="time-entry-hint">ドラッグ操作では他の予定との重なりを避けます。重複させる場合は開始・終了時刻を直接指定してください。</p><fieldset className="color-palette"><legend>予定の色</legend><div className="color-swatch-grid">{colorOptions.map((color) => <label className="color-swatch" key={color.value}><input type="radio" name="color" value={color.value} defaultChecked={color.value.toLowerCase() === (editing.color ?? DEFAULT_EVENT_COLOR).toLowerCase()} /><span className="color-swatch-chip" style={{ "--swatch-color": color.value } as CSSProperties} /><small>{color.name}</small></label>)}</div></fieldset><label>メモ（任意）<textarea name="memo" rows={3} maxLength={2000} defaultValue={editing.memo} /></label><div className="form-actions">{events.some((e) => e.id === editing.id) && <button type="button" className="delete-button" onClick={() => void remove(editing.id)}>削除</button>}<button type="button" className="secondary-button" onClick={() => setEditing(null)}>キャンセル</button><button type="submit" className="save-button">保存</button></div></form>
     </section></div>}
   </div>;
 }
