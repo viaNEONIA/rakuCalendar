@@ -8,21 +8,21 @@ export interface PositionedEvent {
 
 export type DragMode = "move" | "resize-start" | "resize-end";
 
+export const EVENT_TIME_INCREMENT_MINUTES = 15;
 
 export function defaultEventRange(day: Date, now: Date): { start: Date; end: Date } {
   const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), now.getHours(), now.getMinutes());
   start.setSeconds(0, 0);
-  const minute = start.getMinutes();
-  if (minute !== 0 && minute !== 30) start.setMinutes(minute < 30 ? 30 : 60);
+  start.setMinutes(Math.ceil(start.getMinutes() / EVENT_TIME_INCREMENT_MINUTES) * EVENT_TIME_INCREMENT_MINUTES);
   if (start.getFullYear() !== day.getFullYear() || start.getMonth() !== day.getMonth() || start.getDate() !== day.getDate()) {
     start.setFullYear(day.getFullYear(), day.getMonth(), day.getDate());
-    start.setHours(23, 30, 0, 0);
+    start.setHours(23, 45, 0, 0);
   }
   return { start, end: new Date(start.getTime() + 30 * 60_000) };
 }
 
-export function nearestHalfHourMinute(minuteOfDay: number): number {
-  return Math.round(minuteOfDay / 30) * 30;
+export function nearestQuarterHourMinute(minuteOfDay: number): number {
+  return Math.round(minuteOfDay / EVENT_TIME_INCREMENT_MINUTES) * EVENT_TIME_INCREMENT_MINUTES;
 }
 
 export function snapMinutes(deltaPixels: number, pixelsPerHour: number, slotMinutes: number): number {

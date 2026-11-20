@@ -46,6 +46,11 @@ describe("JSON backup and restore", () => {
     const summary = await restoreData([replacement], settings, "replace");
     expect(summary.added).toBe(1);
     expect((await listEvents()).map((event) => event.id)).toEqual(["b"]);
-    expect((await getSettings()).slotMinutes).toBe(30);
+    expect((await getSettings()).slotMinutes).toBe(15);
+  });
+
+  it("normalizes older drag-interval settings to the fixed 15-minute interval", () => {
+    const backup = makeBackup([], { ...DEFAULT_SETTINGS, slotMinutes: 30 }, new Date("2026-11-20T00:00:00Z"));
+    expect(parseBackup(JSON.stringify(backup)).settings.slotMinutes).toBe(15);
   });
 });

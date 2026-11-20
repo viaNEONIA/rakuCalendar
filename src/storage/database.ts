@@ -62,7 +62,7 @@ export async function getSettings(): Promise<CalendarSettings> {
   try {
     return await new Promise((resolve, reject) => {
       const request = db.transaction(SETTINGS_STORE, "readonly").objectStore(SETTINGS_STORE).get("current");
-      request.onsuccess = () => resolve({ ...DEFAULT_SETTINGS, ...(request.result?.value as Partial<CalendarSettings> | undefined) });
+      request.onsuccess = () => resolve({ ...DEFAULT_SETTINGS, ...(request.result?.value as Partial<CalendarSettings> | undefined), slotMinutes: 15 });
       request.onerror = () => reject(request.error);
     });
   } finally { db.close(); }
@@ -80,7 +80,7 @@ export async function restoreData(
       const tx = db.transaction([EVENT_STORE, SETTINGS_STORE], "readwrite");
       const eventStore = tx.objectStore(EVENT_STORE);
       let summary = { added: 0, updated: 0, skipped: 0 };
-      const writeSettings = () => tx.objectStore(SETTINGS_STORE).put({ key: "current", value: { ...DEFAULT_SETTINGS, ...settings } });
+      const writeSettings = () => tx.objectStore(SETTINGS_STORE).put({ key: "current", value: { ...DEFAULT_SETTINGS, ...settings, slotMinutes: 15 } });
       if (mode === "replace") {
         eventStore.clear();
         for (const event of events) eventStore.put(event);
