@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "rakuCalendar",
+  "short_name": "rakuCalendar",
+  "description": "1日の予定を時間軸で管理するシンプルなカレンダー",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6f8fc",
+  "theme_color": "#f6f8fc",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
