@@ -29,6 +29,12 @@ export function snapMinutes(deltaPixels: number, pixelsPerHour: number, slotMinu
   return Math.round(deltaPixels / pixelsPerHour * 60 / slotMinutes) * slotMinutes;
 }
 
+export const POINTER_SCROLL_THRESHOLD = 6;
+
+export function hasPointerScrollIntent(startY: number, currentY: number): boolean {
+  return Math.abs(currentY - startY) > POINTER_SCROLL_THRESHOLD;
+}
+
 export function pointerScrollDelta(previousY: number, currentY: number): number {
   return previousY - currentY;
 }
