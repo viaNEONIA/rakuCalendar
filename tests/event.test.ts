@@ -15,7 +15,7 @@ const validEvent = {
 describe("calendar foundation", () => {
   it("provides a supported default settings schema", () => {
     expect(DEFAULT_SETTINGS.schemaVersion).toBe(1);
-    expect([10, 20, 30]).toContain(DEFAULT_SETTINGS.slotMinutes);
+    expect(DEFAULT_SETTINGS.slotMinutes).toBe(15);
   });
 
   it("offers only light colors in the event palette", () => {
