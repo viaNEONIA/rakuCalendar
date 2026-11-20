@@ -32,11 +32,11 @@ export function parseBackup(text: string): CalendarBackup {
   }
   if (!value.settings || typeof value.settings !== "object") throw new Error("設定データがありません。");
   const settings = value.settings as CalendarSettings;
-  if (![10, 20, 30].includes(settings.slotMinutes) || ![0, 7, 14, 30].includes(settings.backupReminderDays) || typeof settings.showCurrentTime !== "boolean" || typeof settings.showNextEvent !== "boolean" || typeof settings.showOverlaps !== "boolean" || !Number.isInteger(settings.displayStartHour) || !Number.isInteger(settings.displayEndHour) || settings.displayStartHour < 0 || settings.displayStartHour > 23 || settings.displayEndHour < 1 || settings.displayEndHour > 24 || settings.displayStartHour >= settings.displayEndHour) throw new Error("設定データの値が正しくありません。");
+  if (![10, 15, 20, 30].includes(settings.slotMinutes) || ![0, 7, 14, 30].includes(settings.backupReminderDays) || typeof settings.showCurrentTime !== "boolean" || typeof settings.showNextEvent !== "boolean" || typeof settings.showOverlaps !== "boolean" || !Number.isInteger(settings.displayStartHour) || !Number.isInteger(settings.displayEndHour) || settings.displayStartHour < 0 || settings.displayStartHour > 23 || settings.displayEndHour < 1 || settings.displayEndHour > 24 || settings.displayStartHour >= settings.displayEndHour) throw new Error("設定データの値が正しくありません。");
   if (typeof value.exportedAt !== "string" || !Number.isFinite(Date.parse(value.exportedAt))) throw new Error("バックアップ日時が正しくありません。");
   if (typeof value.timezone !== "string" || typeof value.appVersion !== "string") throw new Error("バックアップの情報が不足しています。");
   if (settings.lastBackupCreatedAt !== undefined && (typeof settings.lastBackupCreatedAt !== "string" || !Number.isFinite(Date.parse(settings.lastBackupCreatedAt)))) throw new Error("最終バックアップ日時が正しくありません。");
-  return { ...value, settings: { ...DEFAULT_SETTINGS, ...settings }, events: value.events } as CalendarBackup;
+  return { ...value, settings: { ...DEFAULT_SETTINGS, ...settings, slotMinutes: 15 }, events: value.events } as CalendarBackup;
 }
 
 export function eventsEqual(a: CalendarEvent, b: CalendarEvent): boolean {
