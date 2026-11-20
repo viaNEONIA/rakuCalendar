@@ -71,5 +71,13 @@ describe("calendar viewing and editing modes", () => {
     await click(container.querySelector(".event-card"));
     expect(container.querySelector('[role="dialog"] h2')?.textContent).toBe("予定を編集");
     expect(container.querySelectorAll(".color-swatch")).toHaveLength(8);
+    await click(container.querySelector('[aria-label="閉じる"]'));
+
+    await click(container.querySelector(".add-button"));
+    const timeInputs = Array.from(container.querySelectorAll<HTMLInputElement>('input[name="startAt"], input[name="endAt"]'));
+    expect(timeInputs.map((input) => input.step)).toEqual(["900", "900"]);
+    expect(timeInputs[0].value.slice(-2)).toMatch(/^(00|15|30|45)$/);
+    expect(timeInputs[1].value.slice(-2)).toMatch(/^(00|15|30|45)$/);
+    expect(new Date(timeInputs[1].value).getTime() - new Date(timeInputs[0].value).getTime()).toBe(30 * 60_000);
   });
 });
