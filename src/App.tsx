@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FormEvent, PointerEvent as ReactPointerEvent } from "react";
-import { DEFAULT_SETTINGS } from "./domain/event";
+import { DEFAULT_EVENT_COLOR, DEFAULT_SETTINGS, EVENT_COLOR_PALETTE } from "./domain/event";
 import type { CalendarEvent, CalendarSettings } from "./domain/event";
 import { makeBackup, parseBackup } from "./domain/backup";
 import type { CalendarBackup } from "./domain/backup";
@@ -43,6 +43,8 @@ export function App() {
   const [selectedDay, setSelectedDay] = useState(() => dayKey(new Date()));
   const [now, setNow] = useState(() => new Date());
   const [editing, setEditing] = useState<CalendarEvent | null>(null);
+  const [viewingEvent, setViewingEvent] = useState<CalendarEvent | null>(null);
+  const [mode, setMode] = useState<"view" | "edit">("view");
   const [loaded, setLoaded] = useState(false);
   const [settings, setSettings] = useState<CalendarSettings>(DEFAULT_SETTINGS);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -272,10 +274,20 @@ export function App() {
   }
 
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const colorOptions = editing?.color && !EVENT_COLOR_PALETTE.some((color) => color.value.toLowerCase() === editing.color?.toLowerCase())
+    ? [...EVENT_COLOR_PALETTE, { name: "現在の色", value: editing.color }]
+    : EVENT_COLOR_PALETTE;
 
-  return <div className="app-shell">
+  return <div className={`app-shell${mode === "edit" ? " is-edit-mode" : ""}`}>
     <header className="topbar">
-      <div className="brand-line"><span className="mini-mark">r</span><strong>rakuCalendar</strong><button className="icon-button settings-button" aria-label="設定" onClick={() => setSettingsOpen(true)}>⚙</button></div>
+      <div className="brand-line"><span className="mini-mark">r</span><strong>rakuCalendar</strong><button className={`mode-toggle${mode === "edit" ? " is-editing" : ""}`} aria-pressed={mode === "edit"} aria-label={mode === "view" ? "編集モードへ切り替え" : "閲覧モードへ切り替え"} onClick={() => {
+        const nextMode = mode === "view" ? "edit" : "view";
+        if (nextMode === "view") {
+          if (dragSeed.current?.timer) window.clearTimeout(dragSeed.current.timer);
+          dragSeed.current = null; dragRef.current = null; suppressClick.current = false; setDragPreview(null);
+        }
+        setMode(nextMode);
+      }}>{mode === "view" ? "閲覧" : "編集"}</button><button className="icon-button settings-button" aria-label="設定" onClick={() => setSettingsOpen(true)}>⚙</button></div>
       <div className="date-controls">
         <button className="icon-button" aria-label="前日" onClick={() => changeDay(-1)}>‹</button>
         <label className="date-label"><span>{day.toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" })}</span><input aria-label="表示日" type="date" value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} /></label>
@@ -291,7 +303,7 @@ export function App() {
     {settings.backupReminderDays > 0 && (!settings.lastBackupCreatedAt || Date.now() - Date.parse(settings.lastBackupCreatedAt) >= settings.backupReminderDays * 86_400_000) && <div className="backup-notice">バックアップの作成時期です <button onClick={() => setSettingsOpen(true)}>設定を開く</button></div>}
 
     <main className="timeline" ref={timelineRef} aria-label="1日の予定" onClick={(e) => {
-      if ((e.target as HTMLElement).closest("button, input, label")) return;
+      if (mode !== "edit" || (e.target as HTMLElement).closest("button, input, label")) return;
       const rect = e.currentTarget.getBoundingClientRect();
       const rawMinute = settings.displayStartHour * 60 + Math.floor(((e.clientY - rect.top + e.currentTarget.scrollTop) / HOUR_HEIGHT) * 60);
       const snappedMinute = nearestHalfHourMinute(rawMinute);
@@ -324,13 +336,15 @@ export function App() {
           };
           const old = geometry(event), currentGeometry = geometry(shownEvent);
           const { visibleStart, visibleEnd, ...shellStyle } = currentGeometry;
-          return <div key={event.id} className={`event-shell${isDragging ? " is-dragging" : ""}`} style={{ ...shellStyle, "--event-color": shownEvent.color || "#e8edff" } as CSSProperties} onPointerMove={movePointer} onPointerUp={(e) => void finishPointer(e)} onPointerCancel={() => { if (dragSeed.current?.timer) window.clearTimeout(dragSeed.current.timer); dragSeed.current = null; dragRef.current = null; suppressClick.current = false; setDragPreview(null); }}>
+          return <div key={event.id} className={`event-shell${isDragging ? " is-dragging" : ""}`} style={{ ...shellStyle, "--event-color": shownEvent.color || DEFAULT_EVENT_COLOR } as CSSProperties} onPointerMove={mode === "edit" ? movePointer : undefined} onPointerUp={mode === "edit" ? (e) => void finishPointer(e) : undefined} onPointerCancel={mode === "edit" ? () => { if (dragSeed.current?.timer) window.clearTimeout(dragSeed.current.timer); dragSeed.current = null; dragRef.current = null; suppressClick.current = false; setDragPreview(null); } : undefined}>
             {isDragging && <div className="event-ghost" style={{ top: old.top - currentGeometry.top, height: old.height }} />}
-            <button className="event-card" onPointerDown={(e) => startPointer(e, event, "move")} onClick={() => { if (!suppressClick.current) setEditing(event); }} aria-label={`${event.title} ${formatTime(visibleStart.toISOString())}から${formatTime(visibleEnd.toISOString())}`}>
+            <button className="event-card" onPointerDown={mode === "edit" ? (e) => startPointer(e, event, "move") : undefined} onClick={() => {
+              if (mode === "edit" && !suppressClick.current) setEditing(event);
+              else if (mode === "view") setViewingEvent(event);
+            }} aria-label={`${event.title} ${formatTime(visibleStart.toISOString())}から${formatTime(visibleEnd.toISOString())}`}>
               <strong>{shownEvent.title}</strong><span>{formatTime(visibleStart.toISOString())}–{formatTime(visibleEnd.toISOString())}</span>{shownEvent.destination && <small>{shownEvent.destination}</small>}
             </button>
-            <button className="resize-handle resize-start" aria-label="開始時刻を変更" onPointerDown={(e) => startPointer(e, event, "resize-start")} />
-            <button className="resize-handle resize-end" aria-label="終了時刻を変更" onPointerDown={(e) => startPointer(e, event, "resize-end")} />
+            {mode === "edit" && <><button className="resize-handle resize-start" aria-label="開始時刻を変更" onPointerDown={(e) => startPointer(e, event, "resize-start")} /><button className="resize-handle resize-end" aria-label="終了時刻を変更" onPointerDown={(e) => startPointer(e, event, "resize-end")} /></>}
           </div>;
         })}
       </div>
@@ -338,7 +352,7 @@ export function App() {
       {visibleEvents.length === 0 && <p className="empty-day">空き時間をタップするか、右下の＋から予定を追加できます。</p>}
     </main>
     <button className="now-button" aria-label="現在時刻へ" onClick={() => { if (timelineRef.current) timelineRef.current.scrollTo({ top: Math.max(0, (nowMinutes - settings.displayStartHour * 60) * HOUR_HEIGHT / 60 - 36), behavior: "smooth" }); }}>今</button>
-    <button className="add-button" aria-label="予定を追加" onClick={() => setEditing(makeInitialEvent(dateFromKey(selectedDay), new Date()))}>＋</button>
+    {mode === "edit" && <button className="add-button" aria-label="予定を追加" onClick={() => setEditing(makeInitialEvent(dateFromKey(selectedDay), new Date()))}>＋</button>}
     {undoVisible && <div className="undo-bar" role="status"><span>時間を変更しました</span><button onClick={() => void travelHistory("undo")} disabled={historyIndex.current <= 0}>元に戻す</button><button onClick={() => void travelHistory("redo")} disabled={historyIndex.current >= history.current.length}>やり直す</button></div>}
 
     {settingsOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) { setSettingsOpen(false); setBackupPreview(null); } }}><section className="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
@@ -356,8 +370,10 @@ export function App() {
       <button className="secondary-button settings-done" onClick={() => { setSettingsOpen(false); setBackupPreview(null); }}>閉じる</button>
     </section></div>}
 
+    {viewingEvent && <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setViewingEvent(null); }}><section className="event-dialog" role="dialog" aria-modal="true" aria-labelledby="view-event-title"><div className="dialog-head"><h2 id="view-event-title">予定の詳細</h2><button className="icon-button" onClick={() => setViewingEvent(null)} aria-label="閉じる">×</button></div><div className="event-details"><strong>{viewingEvent.title}</strong><p>{new Date(viewingEvent.startAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" })}–{formatTime(viewingEvent.endAt)}</p>{viewingEvent.destination && <p>行先: {viewingEvent.destination}</p>}{viewingEvent.memo && <p className="event-detail-memo">{viewingEvent.memo}</p>}<button className="secondary-button settings-done" onClick={() => setViewingEvent(null)}>閉じる</button></div></section></div>}
+
     {editing && <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setEditing(null); }}><section className="event-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div className="dialog-head"><h2 id="dialog-title">{events.some((e) => e.id === editing.id) ? "予定を編集" : "予定を追加"}</h2><button className="icon-button" onClick={() => setEditing(null)} aria-label="閉じる">×</button></div>
-      <form onSubmit={submitForm} className="event-form"><label>予定内容<input name="title" required maxLength={120} autoFocus defaultValue={editing.title} /></label><label>行先（任意）<input name="destination" maxLength={120} defaultValue={editing.destination} /></label><div className="form-row"><label>開始<input name="startAt" type="datetime-local" step={events.some((e) => e.id === editing.id) ? 60 : 1800} required defaultValue={localDateTime(new Date(editing.startAt))} /></label><label>終了<input name="endAt" type="datetime-local" step={events.some((e) => e.id === editing.id) ? 60 : 1800} required defaultValue={localDateTime(new Date(editing.endAt))} /></label></div><label className="color-field">表示色<input name="color" type="color" defaultValue={editing.color ?? "#e8edff"} /></label><label>メモ（任意）<textarea name="memo" rows={3} maxLength={2000} defaultValue={editing.memo} /></label><div className="form-actions">{events.some((e) => e.id === editing.id) && <button type="button" className="delete-button" onClick={() => void remove(editing.id)}>削除</button>}<button type="button" className="secondary-button" onClick={() => setEditing(null)}>キャンセル</button><button type="submit" className="save-button">保存</button></div></form>
+      <form onSubmit={submitForm} className="event-form"><label>予定内容<input name="title" required maxLength={120} autoFocus defaultValue={editing.title} /></label><label>行先（任意）<input name="destination" maxLength={120} defaultValue={editing.destination} /></label><div className="form-row"><label>開始<input name="startAt" type="datetime-local" step={events.some((e) => e.id === editing.id) ? 60 : 1800} required defaultValue={localDateTime(new Date(editing.startAt))} /></label><label>終了<input name="endAt" type="datetime-local" step={events.some((e) => e.id === editing.id) ? 60 : 1800} required defaultValue={localDateTime(new Date(editing.endAt))} /></label></div><fieldset className="color-palette"><legend>予定の色</legend><div className="color-swatch-grid">{colorOptions.map((color) => <label className="color-swatch" key={color.value}><input type="radio" name="color" value={color.value} defaultChecked={color.value.toLowerCase() === (editing.color ?? DEFAULT_EVENT_COLOR).toLowerCase()} /><span className="color-swatch-chip" style={{ "--swatch-color": color.value } as CSSProperties} /><small>{color.name}</small></label>)}</div></fieldset><label>メモ（任意）<textarea name="memo" rows={3} maxLength={2000} defaultValue={editing.memo} /></label><div className="form-actions">{events.some((e) => e.id === editing.id) && <button type="button" className="delete-button" onClick={() => void remove(editing.id)}>削除</button>}<button type="button" className="secondary-button" onClick={() => setEditing(null)}>キャンセル</button><button type="submit" className="save-button">保存</button></div></form>
     </section></div>}
   </div>;
 }
