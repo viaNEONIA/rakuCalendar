@@ -12,7 +12,8 @@ export interface CalendarEvent {
 
 export interface CalendarSettings {
   schemaVersion: 1;
-  slotMinutes: 10 | 20 | 30;
+  /** Fixed 15-minute interaction interval. Kept in schema for older backups. */
+  slotMinutes: 10 | 15 | 20 | 30;
   displayStartHour: number;
   displayEndHour: number;
   showCurrentTime: boolean;
@@ -37,7 +38,7 @@ export const DEFAULT_EVENT_COLOR = EVENT_COLOR_PALETTE[5].value;
 
 export const DEFAULT_SETTINGS: CalendarSettings = {
   schemaVersion: 1,
-  slotMinutes: 10,
+  slotMinutes: 15,
   displayStartHour: 0,
   displayEndHour: 24,
   showCurrentTime: true,
