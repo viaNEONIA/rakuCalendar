@@ -24,6 +24,10 @@ npm run build
 
 各段階の差分・検証・未解決事項はGitHub PRに記載しています。仕様書は [docs/WORK_HANDOFF.md](docs/WORK_HANDOFF.md) です。
 
+## 実機確認
+
+GitHub Pagesへ `main` の更新ごとに自動デプロイします。初回はリポジトリ Settings > Pages の Source を GitHub Actions に設定してください。Actions の「Deploy GitHub Pages」が成功したら、[実機確認URL](https://viaNEONIA.github.io/rakuCalendar/)をAndroid Chromeで開きます。スマートフォンでのドラッグ、時間変更、重複表示、バックアップ、オフライン確認は [実機確認チェックリスト](docs/DEVICE_TEST_CHECKLIST.md) に記録します。
+
 ## 仕様上の未決定事項
 
 行先を必須にするか、開始時刻の丸め方向、20分刻みのスナップ基準、重複多数時の集約方法、Undo/Redoの履歴範囲、ICS出力範囲とタイムゾーン詳細は未決定です。必要な段階で判断理由と暫定動作をPRに記録します。

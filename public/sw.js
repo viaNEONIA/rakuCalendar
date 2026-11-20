@@ -1,5 +1,6 @@
-const CACHE_NAME = "raku-calendar-shell-v1";
-const APP_SHELL = ["/", "/manifest.webmanifest"];
+const CACHE_NAME = "raku-calendar-shell-v2";
+const APP_BASE = new URL(".", self.registration.scope);
+const APP_SHELL = [APP_BASE.href, new URL("manifest.webmanifest", APP_BASE).href];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -17,9 +18,11 @@ self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET" || new URL(event.request.url).origin !== self.location.origin) return;
   event.respondWith(
     fetch(event.request).then((response) => {
-      const copy = response.clone();
-      void caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+      if (response.ok) {
+        const copy = response.clone();
+        void caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+      }
       return response;
-    }).catch(() => caches.match(event.request).then((cached) => cached || caches.match("/")))
+    }).catch(() => caches.match(event.request).then((cached) => cached || caches.match(APP_BASE.href)))
   );
 });
