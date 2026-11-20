@@ -5,7 +5,7 @@ import type { CalendarEvent, CalendarSettings } from "./domain/event";
 import { makeBackup, parseBackup } from "./domain/backup";
 import type { CalendarBackup } from "./domain/backup";
 import { createICalendar } from "./domain/ical";
-import { changeEventTime, dayEvents, dateFromKey, dayKey, getNextEvent, layoutOverlaps, localDateTime, nearestHalfHourMinute, defaultEventRange, pointerScrollDelta, snapMinutes } from "./domain/time";
+import { changeEventTime, dayEvents, dateFromKey, dayKey, getNextEvent, layoutOverlaps, localDateTime, nearestHalfHourMinute, defaultEventRange, hasPointerScrollIntent, pointerScrollDelta, snapMinutes } from "./domain/time";
 import type { DragMode } from "./domain/time";
 import { deleteEvent, getSettings, listEvents, restoreData, saveEvent, saveSettings } from "./storage/database";
 
@@ -122,7 +122,7 @@ export function App() {
     const current = dragRef.current;
     if (!current && seed) {
       const movement = e.clientY - seed.clientY;
-      if (seed.scrolling || Math.abs(e.clientY - seed.clientY) > 8) {
+      if (seed.scrolling || hasPointerScrollIntent(seed.clientY, e.clientY)) {
         if (seed.timer) window.clearTimeout(seed.timer);
         if (!seed.scrolling) suppressClick.current = true;
         const timeline = timelineRef.current;
@@ -152,11 +152,15 @@ export function App() {
     dragRef.current = null;
     setDragPreview(null);
     if (!current || e.pointerId !== current.pointerId) {
-      if (seed?.mode === "move" && !seed.scrolling) {
+      const scrollIntent = Boolean(seed && (seed.scrolling || hasPointerScrollIntent(seed.clientY, e.clientY)));
+      if (seed?.mode === "move" && !scrollIntent) {
         suppressClick.current = true;
         setEditing(seed.event);
         window.setTimeout(() => { suppressClick.current = false; }, 0);
-      } else if (seed?.scrolling) {
+      } else if (scrollIntent) {
+        if (seed && !seed.scrolling && timelineRef.current) {
+          timelineRef.current.scrollTop += pointerScrollDelta(seed.clientY, e.clientY);
+        }
         window.setTimeout(() => { suppressClick.current = false; }, 0);
       }
       return;
