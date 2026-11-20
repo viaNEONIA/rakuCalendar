@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changeEventTime, snapMinutes } from "../src/domain/time";
+import { changeEventTime, pointerScrollDelta, snapMinutes } from "../src/domain/time";
 import type { CalendarEvent } from "../src/domain/event";
 
 const base: CalendarEvent = {
@@ -10,6 +10,11 @@ describe("touch timeline time changes", () => {
   it("snaps pointer movement to the selected interval", () => {
     expect(snapMinutes(13, 72, 10)).toBe(10);
     expect(snapMinutes(20, 72, 10)).toBe(20);
+  });
+
+  it("scrolls the timeline opposite to the finger movement before long press", () => {
+    expect(pointerScrollDelta(300, 340)).toBe(-40);
+    expect(pointerScrollDelta(340, 300)).toBe(40);
   });
 
   it("moves an event while preserving its duration", () => {
