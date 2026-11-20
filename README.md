@@ -14,10 +14,14 @@ npm test
 npm run build
 ```
 
-## 開発状況
+## 実装状況
 
-Phase 0 の土台を準備中です。画面・保存・バックアップ・ICS出力の実装状況は各PRと [docs/WORK_HANDOFF.md](docs/WORK_HANDOFF.md) を参照してください。未実装機能を実装済みとして扱いません。
+- Phase 0: PWA基盤、IndexedDB schema v1、テスト/ビルド基盤
+- Phase 1: 日表示、予定の追加・編集・削除、現在時刻、次の予定、重複の横並び表示
+- 後続: タッチドラッグと時間変更、Undo/Redo、設定、JSONバックアップ/復元、ICS出力
 
-## 仕様と未決定事項
+各段階の差分・検証・未解決事項はGitHub PRに記載しています。仕様書は [docs/WORK_HANDOFF.md](docs/WORK_HANDOFF.md) です。
 
-開発仕様は [docs/WORK_HANDOFF.md](docs/WORK_HANDOFF.md) に記録しています。行先の必須/任意、開始時刻の丸め方向など、仕様書に記載された未決定事項は勝手に確定しません。
+## 仕様上の未決定事項
+
+行先を必須にするか、開始時刻の丸め方向、20分刻みのスナップ基準、重複多数時の集約方法、Undo/Redoの履歴範囲、ICS出力範囲とタイムゾーン詳細は未決定です。必要な段階で判断理由と暫定動作をPRに記録します。
