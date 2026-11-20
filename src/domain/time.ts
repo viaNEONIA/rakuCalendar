@@ -12,6 +12,10 @@ export function snapMinutes(deltaPixels: number, pixelsPerHour: number, slotMinu
   return Math.round(deltaPixels / pixelsPerHour * 60 / slotMinutes) * slotMinutes;
 }
 
+export function pointerScrollDelta(previousY: number, currentY: number): number {
+  return previousY - currentY;
+}
+
 export function changeEventTime(event: CalendarEvent, mode: DragMode, deltaMinutes: number, slotMinutes: number): CalendarEvent {
   const start = Date.parse(event.startAt);
   const end = Date.parse(event.endAt);
