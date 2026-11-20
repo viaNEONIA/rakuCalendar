@@ -100,7 +100,18 @@ export function App() {
       {nextEvent ? <><strong>{nextEvent.title}</strong><span className="next-time">{formatTime(nextEvent.startAt)}{nextEvent.destination && ` · ${nextEvent.destination}`}</span></> : <span className="next-empty">予定はありません</span>}
     </section>
 
-    <main className="timeline" ref={timelineRef} aria-label="1日の予定">
+    <main className="timeline" ref={timelineRef} aria-label="1日の予定" onClick={(e) => {
+      if ((e.target as HTMLElement).closest("button, input, label")) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const minute = Math.max(0, Math.min(1439, Math.floor(((e.clientY - rect.top + e.currentTarget.scrollTop) / HOUR_HEIGHT) * 60)));
+      const start = dateFromKey(selectedDay);
+      start.setHours(Math.floor(minute / 60), minute % 60, 0, 0);
+      const end = new Date(start.getTime() + 30 * 60_000);
+      const created = makeInitialEvent(dateFromKey(selectedDay), start);
+      created.startAt = localDateTime(start);
+      created.endAt = localDateTime(end);
+      setEditing(created);
+    }}>
       <div className="time-grid">
         {Array.from({ length: 25 }, (_, hour) => <div className="hour-row" key={hour} style={{ top: hour * HOUR_HEIGHT }}><span>{String(hour % 24).padStart(2, "0")}:00</span><i /></div>)}
       </div>
