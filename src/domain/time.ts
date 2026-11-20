@@ -41,7 +41,7 @@ export function dateFromKey(key: string): Date {
 
 export function dayEvents(events: CalendarEvent[], day: Date): CalendarEvent[] {
   const start = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
-  const end = start + 24 * 60 * 60_000;
+  const end = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1).getTime();
   return events.filter((event) => Date.parse(event.startAt) < end && Date.parse(event.endAt) > start)
     .sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt));
 }
