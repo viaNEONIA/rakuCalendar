@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent } from "../src/domain/event";
-import { dayEvents, defaultEventRange, getNextEvent, layoutOverlaps, nearestQuarterHourMinute, snapMinutes } from "../src/domain/time";
+import { dayEvents, defaultEventRange, getNextEvent, layoutOverlaps, nearestQuarterHourMinute, nextScheduledDay, resolveDragOverlaps, snapMinutes } from "../src/domain/time";
 
 function event(id: string, start: string, end: string): CalendarEvent {
   return { id, title: id, destination: "", startAt: `2026-11-21T${start}:00+09:00`, endAt: `2026-11-21T${end}:00+09:00`, memo: "", createdAt: "", updatedAt: "" };
@@ -12,6 +12,16 @@ describe("day timeline calculations", () => {
     expect(start.getHours()).toBe(9);
     expect(start.getMinutes()).toBe(30);
     expect(end.getTime() - start.getTime()).toBe(30 * 60_000);
+  });
+
+  it("starts a new event after the next scheduled event and skips a gap that is too short", () => {
+    const day = new Date(2026, 10, 21);
+    const now = new Date(2026, 10, 21, 9, 0);
+    const events = [event("next", "10:00", "10:30"), event("later", "10:45", "11:00")];
+    const { start, end } = defaultEventRange(day, now, events);
+    expect(start.getHours()).toBe(11);
+    expect(start.getMinutes()).toBe(0);
+    expect(end.getMinutes()).toBe(30);
   });
 
   it("keeps the selected day at the end of the day when quarter-hour rounding would cross midnight", () => {
@@ -32,6 +42,32 @@ describe("day timeline calculations", () => {
     expect(snapMinutes(19, 72, 15)).toBe(15);
     expect(snapMinutes(28, 72, 15)).toBe(30);
   });
+
+  it("snaps a dragged event to the nearest free 15-minute boundary instead of overlapping", () => {
+    const moving = event("moving", "09:00", "09:30");
+    const blocked = event("blocked", "10:00", "10:30");
+    const proposed = { ...moving, startAt: new Date("2026-11-21T00:45:00Z").toISOString(), endAt: new Date("2026-11-21T01:15:00Z").toISOString() };
+    const resolved = resolveDragOverlaps(moving, proposed, "move", [blocked]);
+    expect(new Date(resolved.startAt).getTime()).toBe(new Date("2026-11-21T00:30:00Z").getTime());
+    expect(Date.parse(resolved.endAt)).toBeLessThanOrEqual(Date.parse(blocked.startAt));
+  });
+
+  it("snaps forward to the next free boundary when a drag crosses an event", () => {
+    const moving = event("moving", "09:00", "09:30");
+    const blocked = event("blocked", "10:00", "10:30");
+    const proposed = { ...moving, startAt: new Date("2026-11-21T01:15:00Z").toISOString(), endAt: new Date("2026-11-21T01:45:00Z").toISOString() };
+    const resolved = resolveDragOverlaps(moving, proposed, "move", [blocked]);
+    expect(new Date(resolved.startAt).getTime()).toBe(new Date("2026-11-21T01:30:00Z").getTime());
+    expect(Date.parse(blocked.endAt)).toBeLessThanOrEqual(Date.parse(resolved.startAt));
+  });
+
+  it("keeps a resized event outside the neighboring event", () => {
+    const resizing = event("resizing", "09:00", "09:30");
+    const blocked = event("blocked", "10:00", "10:30");
+    const proposed = { ...resizing, endAt: new Date("2026-11-21T01:15:00Z").toISOString() };
+    const resolved = resolveDragOverlaps(resizing, proposed, "resize-end", [blocked]);
+    expect(Date.parse(resolved.endAt)).toBe(Date.parse(blocked.startAt));
+  });
   it("returns events intersecting a selected day, including overnight events", () => {
     const previousNight = new Date(2026, 10, 21, 23, 30);
     const nextMorning = new Date(2026, 10, 22, 0, 30);
@@ -49,5 +85,12 @@ describe("day timeline calculations", () => {
     const events = [event("later", "11:00", "12:00"), event("active", "09:00", "10:30")];
     expect(getNextEvent(events, new Date("2026-11-21T00:15:00Z"))?.id).toBe("active");
     expect(getNextEvent(events, new Date("2026-11-21T02:00:00Z"))?.id).toBe("later");
+  });
+
+  it("finds the next day with an event, including the continuation of an overnight event", () => {
+    const overnight = event("overnight", "23:30", "23:59");
+    overnight.endAt = new Date("2026-11-22T01:00:00+09:00").toISOString();
+    expect(nextScheduledDay([overnight], "2026-11-21")).toBe("2026-11-22");
+    expect(nextScheduledDay([event("later", "09:00", "09:30")], "2026-11-21")).toBeUndefined();
   });
 });
