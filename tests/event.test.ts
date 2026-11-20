@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS, isValidEvent } from "../src/domain/event";
+import { DEFAULT_SETTINGS, EVENT_COLOR_PALETTE, isValidEvent } from "../src/domain/event";
 
 const validEvent = {
   id: "event-1",
@@ -16,6 +16,15 @@ describe("calendar foundation", () => {
   it("provides a supported default settings schema", () => {
     expect(DEFAULT_SETTINGS.schemaVersion).toBe(1);
     expect([10, 20, 30]).toContain(DEFAULT_SETTINGS.slotMinutes);
+  });
+
+  it("offers only light colors in the event palette", () => {
+    expect(EVENT_COLOR_PALETTE).toHaveLength(8);
+    for (const { value } of EVENT_COLOR_PALETTE) {
+      const channels = value.slice(1).match(/../g)?.map((channel) => Number.parseInt(channel, 16)) ?? [];
+      expect(channels).toHaveLength(3);
+      expect(Math.min(...channels)).toBeGreaterThanOrEqual(160);
+    }
   });
 
   it("accepts an event with a positive duration", () => {
