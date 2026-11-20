@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent, PointerEvent as ReactPointerEvent } from "react";
+import type { CSSProperties, FormEvent, PointerEvent as ReactPointerEvent } from "react";
 import { DEFAULT_SETTINGS } from "./domain/event";
 import type { CalendarEvent, CalendarSettings } from "./domain/event";
 import { makeBackup, parseBackup } from "./domain/backup";
 import type { CalendarBackup } from "./domain/backup";
 import { createICalendar } from "./domain/ical";
-import { changeEventTime, dayEvents, dateFromKey, dayKey, getNextEvent, layoutOverlaps, localDateTime, pointerScrollDelta, snapMinutes } from "./domain/time";
+import { changeEventTime, dayEvents, dateFromKey, dayKey, getNextEvent, layoutOverlaps, localDateTime, nearestHalfHourMinute, defaultEventRange, hasPointerScrollIntent, pointerScrollDelta, snapMinutes } from "./domain/time";
 import type { DragMode } from "./domain/time";
 import { deleteEvent, getSettings, listEvents, restoreData, saveEvent, saveSettings } from "./storage/database";
 
@@ -27,8 +27,7 @@ interface DragPreview extends DragSeed {
 }
 
 function makeInitialEvent(day: Date, now: Date): CalendarEvent {
-  const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), now.getHours(), now.getMinutes());
-  const end = new Date(start.getTime() + 30 * 60_000);
+  const { start, end } = defaultEventRange(day, now);
   return {
     id: crypto.randomUUID(), title: "", destination: "", startAt: localDateTime(start), endAt: localDateTime(end),
     memo: "", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
@@ -123,7 +122,7 @@ export function App() {
     const current = dragRef.current;
     if (!current && seed) {
       const movement = e.clientY - seed.clientY;
-      if (seed.scrolling || Math.abs(e.clientY - seed.clientY) > 8) {
+      if (seed.scrolling || hasPointerScrollIntent(seed.clientY, e.clientY)) {
         if (seed.timer) window.clearTimeout(seed.timer);
         if (!seed.scrolling) suppressClick.current = true;
         const timeline = timelineRef.current;
@@ -146,19 +145,33 @@ export function App() {
 
   async function finishPointer(e: ReactPointerEvent<HTMLElement>) {
     const seed = dragSeed.current;
+    if (seed && e.pointerId !== seed.pointerId) return;
     if (seed?.timer) window.clearTimeout(seed.timer);
     const current = dragRef.current;
     dragSeed.current = null;
     dragRef.current = null;
     setDragPreview(null);
     if (!current || e.pointerId !== current.pointerId) {
-      if (seed?.scrolling) window.setTimeout(() => { suppressClick.current = false; }, 0);
+      const scrollIntent = Boolean(seed && (seed.scrolling || hasPointerScrollIntent(seed.clientY, e.clientY)));
+      if (seed?.mode === "move" && !scrollIntent) {
+        suppressClick.current = true;
+        setEditing(seed.event);
+        window.setTimeout(() => { suppressClick.current = false; }, 0);
+      } else if (scrollIntent) {
+        if (seed && !seed.scrolling && timelineRef.current) {
+          timelineRef.current.scrollTop += pointerScrollDelta(seed.clientY, e.clientY);
+        }
+        window.setTimeout(() => { suppressClick.current = false; }, 0);
+      }
       return;
     }
     suppressClick.current = true;
     window.setTimeout(() => { suppressClick.current = false; }, 0);
     const after = { ...current.preview, updatedAt: new Date().toISOString() };
-    if (after.startAt === current.event.startAt && after.endAt === current.event.endAt) return;
+    if (after.startAt === current.event.startAt && after.endAt === current.event.endAt) {
+      if (current.mode === "move") setEditing(current.event);
+      return;
+    }
     await saveEvent(after);
     setEvents((items) => items.map((item) => item.id === after.id ? after : item));
     history.current = [...history.current.slice(0, historyIndex.current), { before: current.event, after }];
@@ -280,7 +293,9 @@ export function App() {
     <main className="timeline" ref={timelineRef} aria-label="1日の予定" onClick={(e) => {
       if ((e.target as HTMLElement).closest("button, input, label")) return;
       const rect = e.currentTarget.getBoundingClientRect();
-      const minute = Math.max(settings.displayStartHour * 60, Math.min(settings.displayEndHour * 60 - 1, settings.displayStartHour * 60 + Math.floor(((e.clientY - rect.top + e.currentTarget.scrollTop) / HOUR_HEIGHT) * 60)));
+      const rawMinute = settings.displayStartHour * 60 + Math.floor(((e.clientY - rect.top + e.currentTarget.scrollTop) / HOUR_HEIGHT) * 60);
+      const snappedMinute = nearestHalfHourMinute(rawMinute);
+      const minute = Math.max(settings.displayStartHour * 60, Math.min(settings.displayEndHour * 60 - 30, snappedMinute));
       const start = dateFromKey(selectedDay);
       start.setHours(Math.floor(minute / 60), minute % 60, 0, 0);
       const end = new Date(start.getTime() + 30 * 60_000);
@@ -309,9 +324,9 @@ export function App() {
           };
           const old = geometry(event), currentGeometry = geometry(shownEvent);
           const { visibleStart, visibleEnd, ...shellStyle } = currentGeometry;
-          return <div key={event.id} className={`event-shell${isDragging ? " is-dragging" : ""}`} style={{ ...shellStyle, background: shownEvent.color || undefined }} onPointerMove={movePointer} onPointerUp={(e) => void finishPointer(e)} onPointerCancel={() => { if (dragSeed.current?.timer) window.clearTimeout(dragSeed.current.timer); dragSeed.current = null; dragRef.current = null; setDragPreview(null); }}>
+          return <div key={event.id} className={`event-shell${isDragging ? " is-dragging" : ""}`} style={{ ...shellStyle, "--event-color": shownEvent.color || "#e8edff" } as CSSProperties} onPointerMove={movePointer} onPointerUp={(e) => void finishPointer(e)} onPointerCancel={() => { if (dragSeed.current?.timer) window.clearTimeout(dragSeed.current.timer); dragSeed.current = null; dragRef.current = null; suppressClick.current = false; setDragPreview(null); }}>
             {isDragging && <div className="event-ghost" style={{ top: old.top - currentGeometry.top, height: old.height }} />}
-            <button className="event-card" style={{ background: shownEvent.color || undefined }} onPointerDown={(e) => startPointer(e, event, "move")} onClick={() => { if (!suppressClick.current) setEditing(event); }} aria-label={`${event.title} ${formatTime(visibleStart.toISOString())}から${formatTime(visibleEnd.toISOString())}`}>
+            <button className="event-card" onPointerDown={(e) => startPointer(e, event, "move")} onClick={() => { if (!suppressClick.current) setEditing(event); }} aria-label={`${event.title} ${formatTime(visibleStart.toISOString())}から${formatTime(visibleEnd.toISOString())}`}>
               <strong>{shownEvent.title}</strong><span>{formatTime(visibleStart.toISOString())}–{formatTime(visibleEnd.toISOString())}</span>{shownEvent.destination && <small>{shownEvent.destination}</small>}
             </button>
             <button className="resize-handle resize-start" aria-label="開始時刻を変更" onPointerDown={(e) => startPointer(e, event, "resize-start")} />
@@ -342,7 +357,7 @@ export function App() {
     </section></div>}
 
     {editing && <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setEditing(null); }}><section className="event-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div className="dialog-head"><h2 id="dialog-title">{events.some((e) => e.id === editing.id) ? "予定を編集" : "予定を追加"}</h2><button className="icon-button" onClick={() => setEditing(null)} aria-label="閉じる">×</button></div>
-      <form onSubmit={submitForm} className="event-form"><label>予定内容<input name="title" required maxLength={120} autoFocus defaultValue={editing.title} /></label><label>行先（任意）<input name="destination" maxLength={120} defaultValue={editing.destination} /></label><div className="form-row"><label>開始<input name="startAt" type="datetime-local" required defaultValue={localDateTime(new Date(editing.startAt))} /></label><label>終了<input name="endAt" type="datetime-local" required defaultValue={localDateTime(new Date(editing.endAt))} /></label></div><label className="color-field">表示色<input name="color" type="color" defaultValue={editing.color ?? "#e8edff"} /></label><label>メモ（任意）<textarea name="memo" rows={3} maxLength={2000} defaultValue={editing.memo} /></label><div className="form-actions">{events.some((e) => e.id === editing.id) && <button type="button" className="delete-button" onClick={() => void remove(editing.id)}>削除</button>}<button type="button" className="secondary-button" onClick={() => setEditing(null)}>キャンセル</button><button type="submit" className="save-button">保存</button></div></form>
+      <form onSubmit={submitForm} className="event-form"><label>予定内容<input name="title" required maxLength={120} autoFocus defaultValue={editing.title} /></label><label>行先（任意）<input name="destination" maxLength={120} defaultValue={editing.destination} /></label><div className="form-row"><label>開始<input name="startAt" type="datetime-local" step={events.some((e) => e.id === editing.id) ? 60 : 1800} required defaultValue={localDateTime(new Date(editing.startAt))} /></label><label>終了<input name="endAt" type="datetime-local" step={events.some((e) => e.id === editing.id) ? 60 : 1800} required defaultValue={localDateTime(new Date(editing.endAt))} /></label></div><label className="color-field">表示色<input name="color" type="color" defaultValue={editing.color ?? "#e8edff"} /></label><label>メモ（任意）<textarea name="memo" rows={3} maxLength={2000} defaultValue={editing.memo} /></label><div className="form-actions">{events.some((e) => e.id === editing.id) && <button type="button" className="delete-button" onClick={() => void remove(editing.id)}>削除</button>}<button type="button" className="secondary-button" onClick={() => setEditing(null)}>キャンセル</button><button type="submit" className="save-button">保存</button></div></form>
     </section></div>}
   </div>;
 }

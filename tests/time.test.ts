@@ -1,12 +1,31 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent } from "../src/domain/event";
-import { dayEvents, getNextEvent, layoutOverlaps } from "../src/domain/time";
+import { dayEvents, defaultEventRange, getNextEvent, layoutOverlaps, nearestHalfHourMinute } from "../src/domain/time";
 
 function event(id: string, start: string, end: string): CalendarEvent {
   return { id, title: id, destination: "", startAt: `2026-11-21T${start}:00+09:00`, endAt: `2026-11-21T${end}:00+09:00`, memo: "", createdAt: "", updatedAt: "" };
 }
 
 describe("day timeline calculations", () => {
+  it("starts a new event at the next half-hour and defaults to a 30-minute duration", () => {
+    const { start, end } = defaultEventRange(new Date(2026, 10, 21), new Date(2026, 10, 21, 9, 17));
+    expect(start.getHours()).toBe(9);
+    expect(start.getMinutes()).toBe(30);
+    expect(end.getTime() - start.getTime()).toBe(30 * 60_000);
+  });
+
+  it("keeps the selected day at the end of the day when rounding forward would cross midnight", () => {
+    const { start, end } = defaultEventRange(new Date(2026, 10, 21), new Date(2026, 10, 21, 23, 50));
+    expect(start.getDate()).toBe(21);
+    expect(start.getHours()).toBe(23);
+    expect(start.getMinutes()).toBe(30);
+    expect(end.getDate()).toBe(22);
+  });
+
+  it("snaps empty timeline taps to the nearest half hour", () => {
+    expect(nearestHalfHourMinute(9 * 60 + 14)).toBe(9 * 60);
+    expect(nearestHalfHourMinute(9 * 60 + 16)).toBe(9 * 60 + 30);
+  });
   it("returns events intersecting a selected day, including overnight events", () => {
     const previousNight = new Date(2026, 10, 21, 23, 30);
     const nextMorning = new Date(2026, 10, 22, 0, 30);
