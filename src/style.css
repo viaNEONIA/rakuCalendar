@@ -48,6 +48,25 @@ button { touch-action: manipulation; }
 .undo-bar button { min-height: 40px; padding: 0 9px; border: 0; border-radius: 10px; background: #ffffff1e; color: #fff; font-weight: 700; }
 .undo-bar button:disabled { opacity: .45; }
 .dialog-backdrop { position: fixed; inset: 0; z-index: 10; display: flex; align-items: flex-end; justify-content: center; background: #101b334f; }
+.backup-notice { margin: 8px 14px 0; padding: 8px 12px; border-radius: 12px; background: #fff4dc; color: #7b5b1f; font-size: 12px; }
+.backup-notice button { margin-left: 8px; min-height: 36px; border: 0; border-radius: 9px; padding: 0 9px; background: #f7e5bb; color: #604414; font-weight: 700; }
+.settings-panel { width: min(100%, 560px); max-height: 92dvh; overflow: auto; padding: 10px 20px calc(18px + env(safe-area-inset-bottom)); border-radius: 22px 22px 0 0; background: #fff; box-shadow: 0 -12px 40px #14264b26; }
+.setting-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 56px; border-bottom: 1px solid #edf0f5; color: #3e4b65; font-size: 14px; }
+.setting-row select { min-width: 105px; min-height: 44px; border: 1px solid #dce2ed; border-radius: 10px; background: #fff; color: #243452; padding: 0 10px; }
+.setting-check { display: flex; align-items: center; gap: 10px; min-height: 48px; color: #3e4b65; font-size: 14px; }
+.setting-check input, .restore-preview fieldset input { width: 20px; height: 20px; accent-color: #4969df; }
+.backup-section, .restore-preview { margin-top: 18px; padding-top: 12px; border-top: 1px solid #e8ebf2; }
+.backup-section h3, .restore-preview h3 { margin: 0 0 6px; font-size: 15px; }
+.backup-section p, .restore-preview p { color: #69758d; font-size: 12px; line-height: 1.5; }
+.wide-button { width: 100%; min-height: 48px; border: 0; border-radius: 12px; font-weight: 700; }
+.backup-meta { margin: 8px 0 10px; color: #78839a; font-size: 11px; }
+.file-picker { display: flex; min-height: 48px; align-items: center; justify-content: center; border: 1px dashed #acb8d1; border-radius: 12px; color: #4a5f9c; font-size: 13px; font-weight: 700; }
+.file-picker input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.restore-preview fieldset { display: grid; gap: 7px; margin: 8px 0 12px; padding: 10px; border: 1px solid #e2e7f0; border-radius: 12px; color: #52617a; font-size: 12px; }
+.restore-preview fieldset label { display: flex; align-items: center; gap: 7px; min-height: 36px; }
+.replace-warning { color: #b33e47; font-size: 12px; }
+.settings-message { padding: 9px 11px; border-radius: 10px; background: #f1f4fb; color: #45536e; font-size: 12px; line-height: 1.5; }
+.settings-done { display: block; width: 100%; min-height: 48px; margin: 12px 0 0; border: 0; border-radius: 12px; background: #eef1f7; color: #53617a; font-weight: 700; }
 .event-dialog { width: min(100%, 560px); max-height: 92dvh; overflow: auto; padding: 10px 20px calc(18px + env(safe-area-inset-bottom)); border-radius: 22px 22px 0 0; background: #fff; box-shadow: 0 -12px 40px #14264b26; }
 .dialog-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .dialog-head h2 { margin: 0; font-size: 19px; }
@@ -62,4 +81,4 @@ button { touch-action: manipulation; }
 .delete-button { margin-right: auto; background: #fff0f0; color: #c03c46; }
 .secondary-button { margin-left: auto; background: #f0f2f7; color: #5b6780; }
 .save-button { background: #4969df; color: white; }
-@media (min-width: 600px) { .dialog-backdrop { align-items: center; padding: 20px; } .event-dialog { border-radius: 22px; } }
+@media (min-width: 600px) { .dialog-backdrop { align-items: center; padding: 20px; } .event-dialog, .settings-panel { border-radius: 22px; } }

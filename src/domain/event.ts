@@ -17,6 +17,9 @@ export interface CalendarSettings {
   displayEndHour: number;
   showCurrentTime: boolean;
   showNextEvent: boolean;
+  showOverlaps: boolean;
+  backupReminderDays: 0 | 7 | 14 | 30;
+  lastBackupCreatedAt?: string;
 }
 
 export const DEFAULT_SETTINGS: CalendarSettings = {
@@ -25,7 +28,9 @@ export const DEFAULT_SETTINGS: CalendarSettings = {
   displayStartHour: 0,
   displayEndHour: 24,
   showCurrentTime: true,
-  showNextEvent: true
+  showNextEvent: true,
+  showOverlaps: true,
+  backupReminderDays: 14
 };
 
 export function isValidEvent(value: unknown): value is CalendarEvent {
