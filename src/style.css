@@ -73,6 +73,7 @@ button { touch-action: manipulation; }
 .event-form { display: grid; gap: 12px; }
 .event-form label { display: grid; gap: 6px; color: #52617a; font-size: 12px; font-weight: 650; }
 .event-form input, .event-form textarea { width: 100%; min-height: 48px; border: 1px solid #dce2ed; border-radius: 12px; padding: 10px 12px; outline-color: #6680e3; background: white; color: #182540; font-size: 15px; }
+.event-form input[type="color"] { width: 72px; height: 48px; padding: 4px; }
 .event-form textarea { resize: vertical; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .form-row input { padding: 8px; font-size: 12px; }

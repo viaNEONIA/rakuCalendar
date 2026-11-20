@@ -4,6 +4,7 @@ import { DEFAULT_SETTINGS } from "./domain/event";
 import type { CalendarEvent, CalendarSettings } from "./domain/event";
 import { makeBackup, parseBackup } from "./domain/backup";
 import type { CalendarBackup } from "./domain/backup";
+import { createICalendar } from "./domain/ical";
 import { changeEventTime, dayEvents, dateFromKey, dayKey, getNextEvent, layoutOverlaps, localDateTime, pointerScrollDelta, snapMinutes } from "./domain/time";
 import type { DragMode } from "./domain/time";
 import { deleteEvent, getSettings, listEvents, restoreData, saveEvent, saveSettings } from "./storage/database";
@@ -62,7 +63,10 @@ export function App() {
   const current = new Date();
   const day = dateFromKey(selectedDay);
   const todaysEvents = useMemo(() => dayEvents(events, day), [events, selectedDay]);
-  const positioned = useMemo(() => layoutOverlaps(todaysEvents), [todaysEvents]);
+  const displayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), settings.displayStartHour);
+  const displayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), settings.displayEndHour);
+  const visibleEvents = useMemo(() => todaysEvents.filter((event) => Date.parse(event.startAt) < displayEnd.getTime() && Date.parse(event.endAt) > displayStart.getTime()), [todaysEvents, settings.displayStartHour, settings.displayEndHour]);
+  const positioned = useMemo(() => layoutOverlaps(visibleEvents), [visibleEvents]);
   const nextEvent = useMemo(() => getNextEvent(dayEvents(events, current), now), [events, now, selectedDay]);
   const isToday = selectedDay === dayKey(now);
 
@@ -77,7 +81,7 @@ export function App() {
   useEffect(() => {
     if (!loaded || !isToday || !timelineRef.current) return;
     const minute = now.getHours() * 60 + now.getMinutes();
-    timelineRef.current.scrollTop = Math.max(0, minute * HOUR_HEIGHT / 60 - 30 * HOUR_HEIGHT / 60);
+    timelineRef.current.scrollTop = Math.max(0, (minute - settings.displayStartHour * 60) * HOUR_HEIGHT / 60 - 30 * HOUR_HEIGHT / 60);
   }, [loaded]);
 
   const changeDay = (delta: number) => {
@@ -119,7 +123,7 @@ export function App() {
     const current = dragRef.current;
     if (!current && seed) {
       const movement = e.clientY - seed.clientY;
-      if (seed.scrolling || Math.abs(movement) > 8) {
+      if (seed.scrolling || Math.abs(e.clientY - seed.clientY) > 8) {
         if (seed.timer) window.clearTimeout(seed.timer);
         if (!seed.scrolling) suppressClick.current = true;
         const timeline = timelineRef.current;
@@ -171,7 +175,7 @@ export function App() {
     await saveEvent(target);
     setEvents((items) => items.map((event) => event.id === target.id ? target : event));
     historyIndex.current += direction === "undo" ? -1 : 1;
-    setUndoVisible(false);
+    setUndoVisible(historyIndex.current > 0 || historyIndex.current < history.current.length);
   }
 
   async function exportBackup() {
@@ -187,6 +191,18 @@ export function App() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     setSettings(updatedSettings);
     setSettingsMessage("バックアップファイルを作成しました。保存先でファイルを確認してください。");
+  }
+
+  function exportICalendar() {
+    if (!todaysEvents.length) { setSettingsMessage("この日に出力できる予定はありません。"); return; }
+    const blob = new Blob([createICalendar(todaysEvents)], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `rakuCalendar-${selectedDay.replaceAll("-", "")}.ics`;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setSettingsMessage(`${selectedDay}の予定${todaysEvents.length}件をICSファイルに出力しました。カレンダーアプリからインポートしてください。`);
   }
 
   async function readBackup(file?: File) {
@@ -214,6 +230,7 @@ export function App() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "z") return;
+      if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable='true']")) return;
       if (e.shiftKey) void travelHistory("redo");
       else void travelHistory("undo");
       e.preventDefault();
@@ -232,13 +249,13 @@ export function App() {
       window.alert("終了時刻は開始時刻より後にしてください。");
       return;
     }
-    void persist({ ...editing, title: String(form.get("title")).trim(), destination: String(form.get("destination")).trim(), startAt: start.toISOString(), endAt: end.toISOString(), memo: String(form.get("memo")).trim(), updatedAt: new Date().toISOString() });
+    void persist({ ...editing, title: String(form.get("title")).trim(), destination: String(form.get("destination")).trim(), startAt: start.toISOString(), endAt: end.toISOString(), memo: String(form.get("memo")).trim(), color: String(form.get("color")), updatedAt: new Date().toISOString() });
   }
 
   function jumpToNext() {
     if (!nextEvent || !timelineRef.current) return;
     const start = new Date(nextEvent.startAt);
-    timelineRef.current.scrollTo({ top: Math.max(0, (start.getHours() * 60 + start.getMinutes()) * HOUR_HEIGHT / 60 - 80), behavior: "smooth" });
+    timelineRef.current.scrollTo({ top: Math.max(0, (start.getHours() * 60 + start.getMinutes() - settings.displayStartHour * 60) * HOUR_HEIGHT / 60 - 80), behavior: "smooth" });
   }
 
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
@@ -254,7 +271,7 @@ export function App() {
       </div>
     </header>
 
-    {settings.showNextEvent && <section className="next-card" onClick={jumpToNext} role="button" tabIndex={0} aria-label="次の予定へ移動">
+    {settings.showNextEvent && <section className="next-card" onClick={jumpToNext} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); jumpToNext(); } }} role="button" tabIndex={0} aria-label="次の予定へ移動">
       <span className="next-label">{nextEvent ? (Date.parse(nextEvent.startAt) <= now.getTime() ? "進行中の予定" : "次の予定") : "これからの予定"}</span>
       {nextEvent ? <><strong>{nextEvent.title}</strong><span className="next-time">{formatTime(nextEvent.startAt)}{nextEvent.destination && ` · ${nextEvent.destination}`}</span></> : <span className="next-empty">予定はありません</span>}
     </section>}
@@ -263,7 +280,7 @@ export function App() {
     <main className="timeline" ref={timelineRef} aria-label="1日の予定" onClick={(e) => {
       if ((e.target as HTMLElement).closest("button, input, label")) return;
       const rect = e.currentTarget.getBoundingClientRect();
-      const minute = Math.max(0, Math.min(1439, Math.floor(((e.clientY - rect.top + e.currentTarget.scrollTop) / HOUR_HEIGHT) * 60)));
+      const minute = Math.max(settings.displayStartHour * 60, Math.min(settings.displayEndHour * 60 - 1, settings.displayStartHour * 60 + Math.floor(((e.clientY - rect.top + e.currentTarget.scrollTop) / HOUR_HEIGHT) * 60)));
       const start = dateFromKey(selectedDay);
       start.setHours(Math.floor(minute / 60), minute % 60, 0, 0);
       const end = new Date(start.getTime() + 30 * 60_000);
@@ -272,21 +289,19 @@ export function App() {
       created.endAt = localDateTime(end);
       setEditing(created);
     }}>
-      <div className="time-grid">
-        {Array.from({ length: 25 }, (_, hour) => <div className="hour-row" key={hour} style={{ top: hour * HOUR_HEIGHT }}><span>{String(hour % 24).padStart(2, "0")}:00</span><i /></div>)}
+      <div className="time-grid" style={{ height: `${(settings.displayEndHour - settings.displayStartHour) * HOUR_HEIGHT}px` }}>
+        {Array.from({ length: settings.displayEndHour - settings.displayStartHour + 1 }, (_, index) => { const hour = settings.displayStartHour + index; return <div className="hour-row" key={hour} style={{ top: index * HOUR_HEIGHT }}><span>{hour === 24 ? "24:00" : `${String(hour).padStart(2, "0")}:00`}</span><i /></div>; })}
       </div>
-      <div className="events-layer">
+      <div className="events-layer" style={{ height: `${(settings.displayEndHour - settings.displayStartHour) * HOUR_HEIGHT}px` }}>
         {positioned.map(({ event, column, columns }) => {
           const isDragging = dragPreview?.event.id === event.id;
           const shownEvent = isDragging ? dragPreview.preview : event;
           const geometry = (item: CalendarEvent) => {
           const start = new Date(item.startAt), end = new Date(item.endAt);
-          const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
-          const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
-          const visibleStart = new Date(Math.max(start.getTime(), dayStart.getTime()));
-          const visibleEnd = new Date(Math.min(end.getTime(), dayEnd.getTime()));
-          const startMinutes = (visibleStart.getTime() - dayStart.getTime()) / 60_000;
-          const endMinutes = (visibleEnd.getTime() - dayStart.getTime()) / 60_000;
+          const visibleStart = new Date(Math.max(start.getTime(), displayStart.getTime()));
+          const visibleEnd = new Date(Math.min(end.getTime(), displayEnd.getTime()));
+          const startMinutes = (visibleStart.getTime() - displayStart.getTime()) / 60_000;
+          const endMinutes = (visibleEnd.getTime() - displayStart.getTime()) / 60_000;
           const top = startMinutes * HOUR_HEIGHT / 60;
           const height = Math.max(44, (endMinutes - startMinutes) * HOUR_HEIGHT / 60);
           const fraction = column / columns;
@@ -296,7 +311,7 @@ export function App() {
           const { visibleStart, visibleEnd, ...shellStyle } = currentGeometry;
           return <div key={event.id} className={`event-shell${isDragging ? " is-dragging" : ""}`} style={{ ...shellStyle, background: shownEvent.color || undefined }} onPointerMove={movePointer} onPointerUp={(e) => void finishPointer(e)} onPointerCancel={() => { if (dragSeed.current?.timer) window.clearTimeout(dragSeed.current.timer); dragSeed.current = null; dragRef.current = null; setDragPreview(null); }}>
             {isDragging && <div className="event-ghost" style={{ top: old.top - currentGeometry.top, height: old.height }} />}
-            <button className="event-card" onPointerDown={(e) => startPointer(e, event, "move")} onClick={() => { if (!suppressClick.current) setEditing(event); }} aria-label={`${event.title} ${formatTime(visibleStart.toISOString())}から${formatTime(visibleEnd.toISOString())}`}>
+            <button className="event-card" style={{ background: shownEvent.color || undefined }} onPointerDown={(e) => startPointer(e, event, "move")} onClick={() => { if (!suppressClick.current) setEditing(event); }} aria-label={`${event.title} ${formatTime(visibleStart.toISOString())}から${formatTime(visibleEnd.toISOString())}`}>
               <strong>{shownEvent.title}</strong><span>{formatTime(visibleStart.toISOString())}–{formatTime(visibleEnd.toISOString())}</span>{shownEvent.destination && <small>{shownEvent.destination}</small>}
             </button>
             <button className="resize-handle resize-start" aria-label="開始時刻を変更" onPointerDown={(e) => startPointer(e, event, "resize-start")} />
@@ -304,27 +319,30 @@ export function App() {
           </div>;
         })}
       </div>
-      {isToday && settings.showCurrentTime && <div className="current-time" style={{ top: nowMinutes * HOUR_HEIGHT / 60 }}><span>{formatTime(now.toISOString())}</span><i /></div>}
-      {todaysEvents.length === 0 && <p className="empty-day">空き時間をタップするか、右下の＋から予定を追加できます。</p>}
+      {isToday && settings.showCurrentTime && nowMinutes >= settings.displayStartHour * 60 && nowMinutes <= settings.displayEndHour * 60 && <div className="current-time" style={{ top: (nowMinutes - settings.displayStartHour * 60) * HOUR_HEIGHT / 60 }}><span>{formatTime(now.toISOString())}</span><i /></div>}
+      {visibleEvents.length === 0 && <p className="empty-day">空き時間をタップするか、右下の＋から予定を追加できます。</p>}
     </main>
-    <button className="now-button" aria-label="現在時刻へ" onClick={() => { if (timelineRef.current) timelineRef.current.scrollTo({ top: Math.max(0, nowMinutes * HOUR_HEIGHT / 60 - 36), behavior: "smooth" }); }}>今</button>
+    <button className="now-button" aria-label="現在時刻へ" onClick={() => { if (timelineRef.current) timelineRef.current.scrollTo({ top: Math.max(0, (nowMinutes - settings.displayStartHour * 60) * HOUR_HEIGHT / 60 - 36), behavior: "smooth" }); }}>今</button>
     <button className="add-button" aria-label="予定を追加" onClick={() => setEditing(makeInitialEvent(dateFromKey(selectedDay), new Date()))}>＋</button>
-    {undoVisible && <div className="undo-bar" role="status"><span>時間を変更しました</span><button onClick={() => void travelHistory("undo")}>元に戻す</button><button aria-label="やり直す" onClick={() => void travelHistory("redo")} disabled={historyIndex.current >= history.current.length}>↶</button></div>}
+    {undoVisible && <div className="undo-bar" role="status"><span>時間を変更しました</span><button onClick={() => void travelHistory("undo")} disabled={historyIndex.current <= 0}>元に戻す</button><button onClick={() => void travelHistory("redo")} disabled={historyIndex.current >= history.current.length}>やり直す</button></div>}
 
     {settingsOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) { setSettingsOpen(false); setBackupPreview(null); } }}><section className="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
       <div className="dialog-head"><h2 id="settings-title">設定</h2><button className="icon-button" aria-label="閉じる" onClick={() => { setSettingsOpen(false); setBackupPreview(null); }}>×</button></div>
       <label className="setting-row">ドラッグの時間刻み<select value={settings.slotMinutes} onChange={(e) => setSettings({ ...settings, slotMinutes: Number(e.target.value) as CalendarSettings["slotMinutes"] })}><option value={10}>10分</option><option value={20}>20分</option><option value={30}>30分</option></select></label>
+      <label className="setting-row">表示開始時刻<select value={settings.displayStartHour} onChange={(e) => { const start = Number(e.target.value); setSettings({ ...settings, displayStartHour: start, displayEndHour: Math.max(settings.displayEndHour, start + 1) }); }}>{Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{String(hour).padStart(2, "0")}:00</option>)}</select></label>
+      <label className="setting-row">表示終了時刻<select value={settings.displayEndHour} onChange={(e) => { const end = Number(e.target.value); setSettings({ ...settings, displayEndHour: end, displayStartHour: Math.min(settings.displayStartHour, end - 1) }); }}>{Array.from({ length: 24 }, (_, index) => { const hour = index + 1; return <option key={hour} value={hour}>{hour === 24 ? "24:00" : `${String(hour).padStart(2, "0")}:00`}</option>; })}</select></label>
       <label className="setting-check"><input type="checkbox" checked={settings.showCurrentTime} onChange={(e) => setSettings({ ...settings, showCurrentTime: e.target.checked })} />現在時刻ラインを表示</label>
       <label className="setting-check"><input type="checkbox" checked={settings.showNextEvent} onChange={(e) => setSettings({ ...settings, showNextEvent: e.target.checked })} />次の予定を表示</label>
       <label className="setting-row">バックアップの注意間隔<select value={settings.backupReminderDays} onChange={(e) => setSettings({ ...settings, backupReminderDays: Number(e.target.value) as CalendarSettings["backupReminderDays"] })}><option value={0}>オフ</option><option value={7}>7日</option><option value={14}>14日</option><option value={30}>30日</option></select></label>
       <div className="backup-section"><h3>バックアップと復元</h3><p>予定と設定をJSONに保存します。ファイルの保存完了ではなく作成日時を記録します。</p><button className="save-button wide-button" onClick={() => void exportBackup()}>バックアップを作成</button><div className="backup-meta">最終作成日時: {settings.lastBackupCreatedAt ? new Date(settings.lastBackupCreatedAt).toLocaleString("ja-JP") : "未作成"}</div><label className="file-picker">バックアップファイルを選択<input type="file" accept="application/json,.json" onChange={(e) => void readBackup(e.target.files?.[0])} /></label></div>
+      <div className="backup-section"><h3>外部カレンダー</h3><p>{selectedDay}の予定{todaysEvents.length}件をiCalendar形式で保存します。Google Calendar、Outlook、Apple Calendarなどにインポートできます。</p><button className="secondary-button wide-button" onClick={exportICalendar}>この日の予定をICS出力</button></div>
       {backupPreview && <div className="restore-preview"><h3>復元内容の確認</h3><p>{backupPreview.events.length}件の予定 · {new Date(backupPreview.exportedAt).toLocaleString("ja-JP")}作成 · {backupPreview.timezone}</p><label className="setting-check"><input type="radio" checked={restoreMode === "merge"} onChange={() => setRestoreMode("merge")} />既存を残して追加・統合</label><label className="setting-check"><input type="radio" checked={restoreMode === "replace"} onChange={() => setRestoreMode("replace")} />全件置き換え</label>{restoreMode === "merge" && <fieldset><legend>同じIDで内容が異なる予定</legend><label><input type="radio" checked={conflictPolicy === "keep-local"} onChange={() => setConflictPolicy("keep-local")} />端末の予定を残す</label><label><input type="radio" checked={conflictPolicy === "use-backup"} onChange={() => setConflictPolicy("use-backup")} />バックアップで更新</label></fieldset>}{restoreMode === "replace" && <label className="setting-check replace-warning"><input type="checkbox" checked={replaceConfirmed} onChange={(e) => setReplaceConfirmed(e.target.checked)} />現在の予定と設定を置き換えることを確認しました</label>}<button className="save-button wide-button" disabled={restoreMode === "replace" && !replaceConfirmed} onClick={() => void restoreBackup()}>復元を実行</button></div>}
       {settingsMessage && <p className="settings-message" role="status">{settingsMessage}</p>}
       <button className="secondary-button settings-done" onClick={() => { setSettingsOpen(false); setBackupPreview(null); }}>閉じる</button>
     </section></div>}
 
     {editing && <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setEditing(null); }}><section className="event-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div className="dialog-head"><h2 id="dialog-title">{events.some((e) => e.id === editing.id) ? "予定を編集" : "予定を追加"}</h2><button className="icon-button" onClick={() => setEditing(null)} aria-label="閉じる">×</button></div>
-      <form onSubmit={submitForm} className="event-form"><label>予定内容<input name="title" required maxLength={120} autoFocus defaultValue={editing.title} /></label><label>行先（任意）<input name="destination" maxLength={120} defaultValue={editing.destination} /></label><div className="form-row"><label>開始<input name="startAt" type="datetime-local" required defaultValue={localDateTime(new Date(editing.startAt))} /></label><label>終了<input name="endAt" type="datetime-local" required defaultValue={localDateTime(new Date(editing.endAt))} /></label></div><label>メモ（任意）<textarea name="memo" rows={3} maxLength={2000} defaultValue={editing.memo} /></label><div className="form-actions">{events.some((e) => e.id === editing.id) && <button type="button" className="delete-button" onClick={() => void remove(editing.id)}>削除</button>}<button type="button" className="secondary-button" onClick={() => setEditing(null)}>キャンセル</button><button type="submit" className="save-button">保存</button></div></form>
+      <form onSubmit={submitForm} className="event-form"><label>予定内容<input name="title" required maxLength={120} autoFocus defaultValue={editing.title} /></label><label>行先（任意）<input name="destination" maxLength={120} defaultValue={editing.destination} /></label><div className="form-row"><label>開始<input name="startAt" type="datetime-local" required defaultValue={localDateTime(new Date(editing.startAt))} /></label><label>終了<input name="endAt" type="datetime-local" required defaultValue={localDateTime(new Date(editing.endAt))} /></label></div><label className="color-field">表示色<input name="color" type="color" defaultValue={editing.color ?? "#e8edff"} /></label><label>メモ（任意）<textarea name="memo" rows={3} maxLength={2000} defaultValue={editing.memo} /></label><div className="form-actions">{events.some((e) => e.id === editing.id) && <button type="button" className="delete-button" onClick={() => void remove(editing.id)}>削除</button>}<button type="button" className="secondary-button" onClick={() => setEditing(null)}>キャンセル</button><button type="submit" className="save-button">保存</button></div></form>
     </section></div>}
   </div>;
 }

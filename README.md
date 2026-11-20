@@ -4,7 +4,7 @@
 
 ## 開発環境
 
-- Node.js 20 以降
+- Node.js 22.12 以降（または24以降）
 - npm
 
 ```sh
@@ -17,10 +17,10 @@ npm run build
 ## 実装状況
 
 - Phase 0: PWA基盤、IndexedDB schema v1、テスト/ビルド基盤
-- Phase 1: 日表示、予定の追加・編集・削除、現在時刻、次の予定、重複の横並び表示
-- Phase 2: 長押しドラッグ移動、上下端の時間変更、10分スナップ、Undo/Redo
-- Phase 3: 操作刻み/表示設定、JSONバックアップ/復元、統合/置換、復元競合の選択
-- 後続: ICS出力、表示時間帯/重複集約などの仕上げ
+- Phase 1: 日表示、予定CRUD、現在時刻、次の予定、重複表示
+- Phase 2: 長押しドラッグ、時間変更、Undo/Redo
+- Phase 3: 設定、JSONバックアップ/復元、統合/置換
+- Phase 4: 表示時間帯設定、ICS出力、オフラインシェル
 
 各段階の差分・検証・未解決事項はGitHub PRに記載しています。仕様書は [docs/WORK_HANDOFF.md](docs/WORK_HANDOFF.md) です。
 
