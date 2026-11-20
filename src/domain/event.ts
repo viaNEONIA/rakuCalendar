@@ -22,6 +22,19 @@ export interface CalendarSettings {
   lastBackupCreatedAt?: string;
 }
 
+export const EVENT_COLOR_PALETTE = [
+  { name: "ローズ", value: "#F2B8C6" },
+  { name: "ピーチ", value: "#F6CCAA" },
+  { name: "レモン", value: "#F5E3A3" },
+  { name: "セージ", value: "#C6DDB9" },
+  { name: "ミント", value: "#B9DED4" },
+  { name: "スカイ", value: "#BBD3EC" },
+  { name: "ラベンダー", value: "#D1C2EA" },
+  { name: "グレー", value: "#D9DDE5" }
+] as const;
+
+export const DEFAULT_EVENT_COLOR = EVENT_COLOR_PALETTE[5].value;
+
 export const DEFAULT_SETTINGS: CalendarSettings = {
   schemaVersion: 1,
   slotMinutes: 10,
