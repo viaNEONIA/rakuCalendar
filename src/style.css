@@ -13,6 +13,8 @@ button { touch-action: manipulation; }
 .mode-toggle { min-width: 58px; min-height: 44px; padding: 0 12px; border: 1px solid #dfe5f0; border-radius: 12px; background: #f4f6fb; color: #4b5b77; font-size: 13px; font-weight: 700; cursor: pointer; }
 .mode-toggle.is-editing { border-color: #4969df; background: #4969df; color: #fff; }
 .date-controls { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 5px; }
+.scheduled-day-row { display: flex; justify-content: center; margin-top: 4px; }
+.scheduled-day-button { min-height: 38px; padding: 0 12px; border: 1px solid #dfe5f0; border-radius: 11px; background: #f7f8fc; color: #53668e; font-size: 12px; font-weight: 650; }
 .date-label { min-width: 190px; text-align: center; position: relative; font-weight: 700; font-size: 16px; }
 .date-label input { position: absolute; inset: 0; width: 100%; opacity: 0; }
 .today-button { min-height: 40px; padding: 0 13px; border: 1px solid #dfe5f0; background: #fff; color: #52617d; border-radius: 12px; font-size: 13px; }
@@ -95,6 +97,7 @@ button { touch-action: manipulation; }
 .event-form textarea { resize: vertical; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .form-row input { padding: 8px; font-size: 12px; }
+.time-entry-hint { margin: -5px 0 0; color: #687793; font-size: 11px; line-height: 1.5; }
 .form-actions { display: flex; gap: 8px; align-items: center; margin-top: 2px; }
 .form-actions button { min-height: 48px; padding: 0 16px; border: 0; border-radius: 13px; font-size: 14px; font-weight: 700; }
 .delete-button { margin-right: auto; background: #fff0f0; color: #c03c46; }
