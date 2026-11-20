@@ -8,8 +8,9 @@ function event(id: string, start: string, end: string): CalendarEvent {
 
 describe("day timeline calculations", () => {
   it("returns events intersecting a selected day, including overnight events", () => {
-    const overnight = event("late", "23:30", "00:30");
-    const nextDay = { ...overnight, startAt: "2026-11-21T23:30:00+09:00", endAt: "2026-11-22T00:30:00+09:00" };
+    const previousNight = new Date(2026, 10, 21, 23, 30);
+    const nextMorning = new Date(2026, 10, 22, 0, 30);
+    const nextDay = { ...event("late", "23:30", "23:59"), startAt: previousNight.toISOString(), endAt: nextMorning.toISOString() };
     expect(dayEvents([nextDay], new Date(2026, 10, 22))).toHaveLength(1);
   });
 

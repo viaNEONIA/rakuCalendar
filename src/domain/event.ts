@@ -41,7 +41,9 @@ export function isValidEvent(value: unknown): value is CalendarEvent {
   if (typeof event.destination !== "string") return false;
   if (typeof event.memo !== "string") return false;
   if (typeof event.startAt !== "string" || typeof event.endAt !== "string") return false;
+  if (typeof event.createdAt !== "string" || typeof event.updatedAt !== "string") return false;
+  if (event.color !== undefined && typeof event.color !== "string") return false;
   const start = Date.parse(event.startAt);
   const end = Date.parse(event.endAt);
-  return Number.isFinite(start) && Number.isFinite(end) && end > start;
+  return Number.isFinite(start) && Number.isFinite(end) && Number.isFinite(Date.parse(event.createdAt)) && Number.isFinite(Date.parse(event.updatedAt)) && end > start;
 }
