@@ -6,6 +6,29 @@ export interface PositionedEvent {
   columns: number;
 }
 
+export type DragMode = "move" | "resize-start" | "resize-end";
+
+export function snapMinutes(deltaPixels: number, pixelsPerHour: number, slotMinutes: number): number {
+  return Math.round(deltaPixels / pixelsPerHour * 60 / slotMinutes) * slotMinutes;
+}
+
+export function pointerScrollDelta(previousY: number, currentY: number): number {
+  return previousY - currentY;
+}
+
+export function changeEventTime(event: CalendarEvent, mode: DragMode, deltaMinutes: number, slotMinutes: number): CalendarEvent {
+  const start = Date.parse(event.startAt);
+  const end = Date.parse(event.endAt);
+  const slot = slotMinutes * 60_000;
+  if (mode === "move") return { ...event, startAt: new Date(start + deltaMinutes * 60_000).toISOString(), endAt: new Date(end + deltaMinutes * 60_000).toISOString() };
+  if (mode === "resize-start") {
+    const nextStart = Math.min(start + deltaMinutes * 60_000, end - slot);
+    return { ...event, startAt: new Date(nextStart).toISOString() };
+  }
+  const nextEnd = Math.max(end + deltaMinutes * 60_000, start + slot);
+  return { ...event, endAt: new Date(nextEnd).toISOString() };
+}
+
 export function dayKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }

@@ -18,7 +18,8 @@ npm run build
 
 - Phase 0: PWA基盤、IndexedDB schema v1、テスト/ビルド基盤
 - Phase 1: 日表示、予定の追加・編集・削除、現在時刻、次の予定、重複の横並び表示
-- 後続: タッチドラッグと時間変更、Undo/Redo、設定、JSONバックアップ/復元、ICS出力
+- Phase 2: 長押しドラッグ移動、上下端の時間変更、10分スナップ、Undo/Redo
+- 後続: 操作刻み設定、JSONバックアップ/復元、ICS出力
 
 各段階の差分・検証・未解決事項はGitHub PRに記載しています。仕様書は [docs/WORK_HANDOFF.md](docs/WORK_HANDOFF.md) です。
 
