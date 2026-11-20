@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, PointerEvent as ReactPointerEvent } from "react";
-import type { CalendarEvent } from "./domain/event";
+import { DEFAULT_SETTINGS } from "./domain/event";
+import type { CalendarEvent, CalendarSettings } from "./domain/event";
+import { makeBackup, parseBackup } from "./domain/backup";
+import type { CalendarBackup } from "./domain/backup";
 import { changeEventTime, dayEvents, dateFromKey, dayKey, getNextEvent, layoutOverlaps, localDateTime, snapMinutes } from "./domain/time";
 import type { DragMode } from "./domain/time";
-import { deleteEvent, listEvents, saveEvent } from "./storage/database";
+import { deleteEvent, getSettings, listEvents, restoreData, saveEvent, saveSettings } from "./storage/database";
 
 const HOUR_HEIGHT = 72;
-const DRAG_SLOT_MINUTES = 10;
 
 interface DragSeed {
   event: CalendarEvent;
@@ -41,6 +43,13 @@ export function App() {
   const [now, setNow] = useState(() => new Date());
   const [editing, setEditing] = useState<CalendarEvent | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [settings, setSettings] = useState<CalendarSettings>(DEFAULT_SETTINGS);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [backupPreview, setBackupPreview] = useState<CalendarBackup | null>(null);
+  const [restoreMode, setRestoreMode] = useState<"merge" | "replace">("merge");
+  const [conflictPolicy, setConflictPolicy] = useState<"keep-local" | "use-backup">("keep-local");
+  const [replaceConfirmed, setReplaceConfirmed] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState("");
   const [dragPreview, setDragPreview] = useState<DragPreview | null>(null);
   const [undoVisible, setUndoVisible] = useState(false);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -57,10 +66,12 @@ export function App() {
   const isToday = selectedDay === dayKey(now);
 
   useEffect(() => {
-    void listEvents().then(setEvents).finally(() => setLoaded(true));
+    void Promise.all([listEvents(), getSettings()]).then(([savedEvents, savedSettings]) => { setEvents(savedEvents); setSettings(savedSettings); }).finally(() => setLoaded(true));
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => { if (loaded) void saveSettings(settings); }, [settings, loaded]);
 
   useEffect(() => {
     if (!loaded || !isToday || !timelineRef.current) return;
@@ -118,8 +129,8 @@ export function App() {
     const bounds = timeline.getBoundingClientRect();
     if (e.clientY < bounds.top + 64) timeline.scrollTop -= 10;
     else if (e.clientY > bounds.bottom - 64) timeline.scrollTop += 10;
-    const delta = snapMinutes(e.clientY - current.clientY + timeline.scrollTop - current.scrollTop, HOUR_HEIGHT, DRAG_SLOT_MINUTES);
-    const updated = { ...current, preview: changeEventTime(current.event, current.mode, delta, DRAG_SLOT_MINUTES) };
+    const delta = snapMinutes(e.clientY - current.clientY + timeline.scrollTop - current.scrollTop, HOUR_HEIGHT, settings.slotMinutes);
+    const updated = { ...current, preview: changeEventTime(current.event, current.mode, delta, settings.slotMinutes) };
     dragRef.current = updated;
     setDragPreview(updated);
   }
@@ -153,6 +164,43 @@ export function App() {
     setEvents((items) => items.map((event) => event.id === target.id ? target : event));
     historyIndex.current += direction === "undo" ? -1 : 1;
     setUndoVisible(false);
+  }
+
+  async function exportBackup() {
+    const createdAt = new Date();
+    const updatedSettings = { ...settings, lastBackupCreatedAt: createdAt.toISOString() };
+    const backup = makeBackup(events, updatedSettings, createdAt);
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `rakuCalendar-backup-${createdAt.toISOString().replace(/[-:T]/g, "").slice(0, 12)}.json`;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setSettings(updatedSettings);
+    setSettingsMessage("バックアップファイルを作成しました。保存先でファイルを確認してください。");
+  }
+
+  async function readBackup(file?: File) {
+    if (!file) return;
+    try {
+      if (file.size > 20_000_000) throw new Error("ファイルサイズが20MBを超えています。");
+      const backup = parseBackup(await file.text());
+      setBackupPreview(backup);
+      setRestoreMode("merge");
+      setReplaceConfirmed(false);
+      setSettingsMessage("");
+    } catch (error) { setSettingsMessage(error instanceof Error ? error.message : "ファイルを読み取れませんでした。"); }
+  }
+
+  async function restoreBackup() {
+    if (!backupPreview || (restoreMode === "replace" && !replaceConfirmed)) return;
+    const result = await restoreData(backupPreview.events, backupPreview.settings, restoreMode, conflictPolicy);
+    const [savedEvents, savedSettings] = await Promise.all([listEvents(), getSettings()]);
+    setEvents(savedEvents);
+    setSettings(savedSettings);
+    setBackupPreview(null);
+    setSettingsMessage(`復元しました。追加 ${result.added}件、更新 ${result.updated}件、スキップ ${result.skipped}件。`);
   }
 
   useEffect(() => {
@@ -189,7 +237,7 @@ export function App() {
 
   return <div className="app-shell">
     <header className="topbar">
-      <div className="brand-line"><span className="mini-mark">r</span><strong>rakuCalendar</strong><button className="icon-button settings-button" aria-label="設定" onClick={() => window.alert("設定は後続Phaseで追加します")}>⚙</button></div>
+      <div className="brand-line"><span className="mini-mark">r</span><strong>rakuCalendar</strong><button className="icon-button settings-button" aria-label="設定" onClick={() => setSettingsOpen(true)}>⚙</button></div>
       <div className="date-controls">
         <button className="icon-button" aria-label="前日" onClick={() => changeDay(-1)}>‹</button>
         <label className="date-label"><span>{day.toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" })}</span><input aria-label="表示日" type="date" value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} /></label>
@@ -198,10 +246,11 @@ export function App() {
       </div>
     </header>
 
-    <section className="next-card" onClick={jumpToNext} role="button" tabIndex={0} aria-label="次の予定へ移動">
+    {settings.showNextEvent && <section className="next-card" onClick={jumpToNext} role="button" tabIndex={0} aria-label="次の予定へ移動">
       <span className="next-label">{nextEvent ? (Date.parse(nextEvent.startAt) <= now.getTime() ? "進行中の予定" : "次の予定") : "これからの予定"}</span>
       {nextEvent ? <><strong>{nextEvent.title}</strong><span className="next-time">{formatTime(nextEvent.startAt)}{nextEvent.destination && ` · ${nextEvent.destination}`}</span></> : <span className="next-empty">予定はありません</span>}
-    </section>
+    </section>}
+    {settings.backupReminderDays > 0 && (!settings.lastBackupCreatedAt || Date.now() - Date.parse(settings.lastBackupCreatedAt) >= settings.backupReminderDays * 86_400_000) && <div className="backup-notice">バックアップの作成時期です <button onClick={() => setSettingsOpen(true)}>設定を開く</button></div>}
 
     <main className="timeline" ref={timelineRef} aria-label="1日の予定" onClick={(e) => {
       if ((e.target as HTMLElement).closest("button, input, label")) return;
@@ -247,12 +296,24 @@ export function App() {
           </div>;
         })}
       </div>
-      {isToday && <div className="current-time" style={{ top: nowMinutes * HOUR_HEIGHT / 60 }}><span>{formatTime(now.toISOString())}</span><i /></div>}
+      {isToday && settings.showCurrentTime && <div className="current-time" style={{ top: nowMinutes * HOUR_HEIGHT / 60 }}><span>{formatTime(now.toISOString())}</span><i /></div>}
       {todaysEvents.length === 0 && <p className="empty-day">空き時間をタップするか、右下の＋から予定を追加できます。</p>}
     </main>
     <button className="now-button" aria-label="現在時刻へ" onClick={() => { if (timelineRef.current) timelineRef.current.scrollTo({ top: Math.max(0, nowMinutes * HOUR_HEIGHT / 60 - 36), behavior: "smooth" }); }}>今</button>
     <button className="add-button" aria-label="予定を追加" onClick={() => setEditing(makeInitialEvent(dateFromKey(selectedDay), new Date()))}>＋</button>
     {undoVisible && <div className="undo-bar" role="status"><span>時間を変更しました</span><button onClick={() => void travelHistory("undo")}>元に戻す</button><button aria-label="やり直す" onClick={() => void travelHistory("redo")} disabled={historyIndex.current >= history.current.length}>↶</button></div>}
+
+    {settingsOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) { setSettingsOpen(false); setBackupPreview(null); } }}><section className="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div className="dialog-head"><h2 id="settings-title">設定</h2><button className="icon-button" aria-label="閉じる" onClick={() => { setSettingsOpen(false); setBackupPreview(null); }}>×</button></div>
+      <label className="setting-row">ドラッグの時間刻み<select value={settings.slotMinutes} onChange={(e) => setSettings({ ...settings, slotMinutes: Number(e.target.value) as CalendarSettings["slotMinutes"] })}><option value={10}>10分</option><option value={20}>20分</option><option value={30}>30分</option></select></label>
+      <label className="setting-check"><input type="checkbox" checked={settings.showCurrentTime} onChange={(e) => setSettings({ ...settings, showCurrentTime: e.target.checked })} />現在時刻ラインを表示</label>
+      <label className="setting-check"><input type="checkbox" checked={settings.showNextEvent} onChange={(e) => setSettings({ ...settings, showNextEvent: e.target.checked })} />次の予定を表示</label>
+      <label className="setting-row">バックアップの注意間隔<select value={settings.backupReminderDays} onChange={(e) => setSettings({ ...settings, backupReminderDays: Number(e.target.value) as CalendarSettings["backupReminderDays"] })}><option value={0}>オフ</option><option value={7}>7日</option><option value={14}>14日</option><option value={30}>30日</option></select></label>
+      <div className="backup-section"><h3>バックアップと復元</h3><p>予定と設定をJSONに保存します。ファイルの保存完了ではなく作成日時を記録します。</p><button className="save-button wide-button" onClick={() => void exportBackup()}>バックアップを作成</button><div className="backup-meta">最終作成日時: {settings.lastBackupCreatedAt ? new Date(settings.lastBackupCreatedAt).toLocaleString("ja-JP") : "未作成"}</div><label className="file-picker">バックアップファイルを選択<input type="file" accept="application/json,.json" onChange={(e) => void readBackup(e.target.files?.[0])} /></label></div>
+      {backupPreview && <div className="restore-preview"><h3>復元内容の確認</h3><p>{backupPreview.events.length}件の予定 · {new Date(backupPreview.exportedAt).toLocaleString("ja-JP")}作成 · {backupPreview.timezone}</p><label className="setting-check"><input type="radio" checked={restoreMode === "merge"} onChange={() => setRestoreMode("merge")} />既存を残して追加・統合</label><label className="setting-check"><input type="radio" checked={restoreMode === "replace"} onChange={() => setRestoreMode("replace")} />全件置き換え</label>{restoreMode === "merge" && <fieldset><legend>同じIDで内容が異なる予定</legend><label><input type="radio" checked={conflictPolicy === "keep-local"} onChange={() => setConflictPolicy("keep-local")} />端末の予定を残す</label><label><input type="radio" checked={conflictPolicy === "use-backup"} onChange={() => setConflictPolicy("use-backup")} />バックアップで更新</label></fieldset>}{restoreMode === "replace" && <label className="setting-check replace-warning"><input type="checkbox" checked={replaceConfirmed} onChange={(e) => setReplaceConfirmed(e.target.checked)} />現在の予定と設定を置き換えることを確認しました</label>}<button className="save-button wide-button" disabled={restoreMode === "replace" && !replaceConfirmed} onClick={() => void restoreBackup()}>復元を実行</button></div>}
+      {settingsMessage && <p className="settings-message" role="status">{settingsMessage}</p>}
+      <button className="secondary-button settings-done" onClick={() => { setSettingsOpen(false); setBackupPreview(null); }}>閉じる</button>
+    </section></div>}
 
     {editing && <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setEditing(null); }}><section className="event-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div className="dialog-head"><h2 id="dialog-title">{events.some((e) => e.id === editing.id) ? "予定を編集" : "予定を追加"}</h2><button className="icon-button" onClick={() => setEditing(null)} aria-label="閉じる">×</button></div>
       <form onSubmit={submitForm} className="event-form"><label>予定内容<input name="title" required maxLength={120} autoFocus defaultValue={editing.title} /></label><label>行先（任意）<input name="destination" maxLength={120} defaultValue={editing.destination} /></label><div className="form-row"><label>開始<input name="startAt" type="datetime-local" required defaultValue={localDateTime(new Date(editing.startAt))} /></label><label>終了<input name="endAt" type="datetime-local" required defaultValue={localDateTime(new Date(editing.endAt))} /></label></div><label>メモ（任意）<textarea name="memo" rows={3} maxLength={2000} defaultValue={editing.memo} /></label><div className="form-actions">{events.some((e) => e.id === editing.id) && <button type="button" className="delete-button" onClick={() => void remove(editing.id)}>削除</button>}<button type="button" className="secondary-button" onClick={() => setEditing(null)}>キャンセル</button><button type="submit" className="save-button">保存</button></div></form>
