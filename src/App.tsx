@@ -276,7 +276,7 @@ export function App() {
     if (!selected) return;
     const changeMode = adjustment === "move" ? "move" : "resize-end";
     const after = { ...changeEventTime(selected, changeMode, direction * EVENT_TIME_INCREMENT_MINUTES, EVENT_TIME_INCREMENT_MINUTES), updatedAt: new Date().toISOString() };
-    if (after.startAt === selected.startAt) return;
+    if (after.startAt === selected.startAt && after.endAt === selected.endAt) return;
     await saveEvent(after);
     setEvents((items) => items.map((event) => event.id === after.id ? after : event));
     history.current = [...history.current.slice(0, historyIndex.current), { before: selected, after }];
