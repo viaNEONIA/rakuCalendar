@@ -5,7 +5,7 @@ import type { CalendarEvent, CalendarSettings } from "./domain/event";
 import { makeBackup, parseBackup } from "./domain/backup";
 import type { CalendarBackup } from "./domain/backup";
 import { createICalendar } from "./domain/ical";
-import { changeEventTime, dayEvents, dateFromKey, dayKey, EVENT_TIME_INCREMENT_MINUTES, getNextEvent, layoutOverlaps, localDateTime, nearestQuarterHourMinute, defaultEventRange, hasPointerScrollIntent, nextAvailableEventRange, nextScheduledDay, nudgeEventWithoutOverlap, pointerScrollDelta, resolveDragOverlaps, snapMinutes } from "./domain/time";
+import { changeEventTime, dayEvents, dateFromKey, dayKey, EVENT_TIME_INCREMENT_MINUTES, getNextEvent, layoutOverlaps, localDateTime, nearestQuarterHourMinute, defaultEventRange, hasPointerScrollIntent, nextAvailableEventRange, nextScheduledDay, pointerScrollDelta, resolveDragOverlaps, snapMinutes } from "./domain/time";
 import type { DragMode } from "./domain/time";
 import { deleteEvent, getSettings, listEvents, restoreData, saveEvent, saveSettings } from "./storage/database";
 
@@ -274,7 +274,7 @@ export function App() {
   async function adjustSelectedTime(direction: -1 | 1) {
     const selected = events.find((event) => event.id === selectedEventId);
     if (!selected) return;
-    const after = { ...nudgeEventWithoutOverlap(selected, direction, events.filter((event) => event.id !== selected.id)), updatedAt: new Date().toISOString() };
+    const after = { ...changeEventTime(selected, "move", direction * EVENT_TIME_INCREMENT_MINUTES, EVENT_TIME_INCREMENT_MINUTES), updatedAt: new Date().toISOString() };
     if (after.startAt === selected.startAt) return;
     await saveEvent(after);
     setEvents((items) => items.map((event) => event.id === after.id ? after : event));

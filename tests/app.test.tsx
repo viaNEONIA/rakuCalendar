@@ -132,11 +132,21 @@ describe("calendar viewing and editing modes", () => {
     await click(card);
     expect(container.querySelector('[role="dialog"]')).toBeNull();
     expect(container.querySelector(".event-shell")?.classList.contains("is-selected")).toBe(true);
-    await click(container.querySelector('[aria-label="15分後へ"]'));
-    const saved = storageState.saved.find((item) => item.id === "mode-test-event");
-    expect(saved).toBeDefined();
-    expect(new Date(saved!.startAt).getMinutes()).toBe(15);
-    expect(new Date(saved!.endAt).getMinutes()).toBe(45);
+    const laterButton = container.querySelector('[aria-label="15分後へ"]');
+    await click(laterButton);
+    await click(laterButton);
+    await click(laterButton);
+    const saved = storageState.saved.at(-1);
+    expect(saved?.id).toBe("mode-test-event");
+    const start = new Date(saved!.startAt);
+    const end = new Date(saved!.endAt);
+    const blocked = storageState.events.find((item) => item.id === "blocked-event")!;
+    expect(start.getHours()).toBe(10);
+    expect(start.getMinutes()).toBe(45);
+    expect(end.getHours()).toBe(11);
+    expect(end.getMinutes()).toBe(15);
+    expect(Date.parse(start.toISOString())).toBeLessThan(Date.parse(blocked.endAt));
+    expect(Date.parse(end.toISOString())).toBeGreaterThan(Date.parse(blocked.startAt));
   });
 
   it("jumps to the next day that has a scheduled event", async () => {
