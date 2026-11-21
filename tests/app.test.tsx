@@ -237,4 +237,11 @@ describe("calendar viewing and editing modes", () => {
     const tomorrowKey = [tomorrow.getFullYear(), String(tomorrow.getMonth() + 1).padStart(2, "0"), String(tomorrow.getDate()).padStart(2, "0")].join("-");
     expect(container.querySelector<HTMLInputElement>('[aria-label="表示日"]')?.value).toBe(tomorrowKey);
   });
+
+  it("toggles pin state from the event details and persists it", async () => {
+    await click(container.querySelector(".event-card"));
+    const pinButton = Array.from(container.querySelectorAll(".event-details button")).find((button) => button.textContent?.includes("ピン留め"));
+    await click(pinButton ?? null);
+    expect(storageState.saved.at(-1)?.pinned).toBe(true);
+  });
 });
