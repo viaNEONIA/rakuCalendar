@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent } from "../src/domain/event";
-import { dayEvents, defaultEventRange, getNextEvent, layoutOverlaps, nearestQuarterHourMinute, nextScheduledDay, resolveDragOverlaps, snapMinutes, stepEventTimeOnQuarterGrid } from "../src/domain/time";
+import { dayEvents, defaultEventRange, getNextEvent, layoutOverlaps, nearestQuarterHourMinute, nextScheduledDay, previousScheduledDay, resolveDragOverlaps, snapMinutes, stepEventTimeOnQuarterGrid } from "../src/domain/time";
 
 function event(id: string, start: string, end: string): CalendarEvent {
   const [startHour, startMinute] = start.split(":").map(Number);
@@ -123,5 +123,14 @@ describe("day timeline calculations", () => {
     overnight.endAt = new Date(2026, 10, 22, 1, 0).toISOString();
     expect(nextScheduledDay([overnight], "2026-11-21")).toBe("2026-11-22");
     expect(nextScheduledDay([event("later", "09:00", "09:30")], "2026-11-21")).toBeUndefined();
+  });
+
+  it("finds the nearest prior day with an event and does not wrap when none exists", () => {
+    const prior = event("prior", "09:00", "09:30");
+    prior.startAt = new Date(2026, 10, 18, 9).toISOString();
+    prior.endAt = new Date(2026, 10, 18, 9, 30).toISOString();
+    const recent = { ...prior, id: "recent", startAt: new Date(2026, 10, 20, 9).toISOString(), endAt: new Date(2026, 10, 20, 9, 30).toISOString() };
+    expect(previousScheduledDay([prior, recent], "2026-11-21")).toBe("2026-11-20");
+    expect(previousScheduledDay([prior], "2026-11-18")).toBeUndefined();
   });
 });
