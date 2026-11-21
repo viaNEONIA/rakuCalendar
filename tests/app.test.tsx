@@ -110,6 +110,22 @@ describe("calendar viewing and editing modes", () => {
     expect(endMinute - startMinute).toBe(30);
   });
 
+  it("does not cancel the native click on a short touch", async () => {
+    await click(container.querySelector(".mode-toggle"));
+    const card = container.querySelector(".event-card");
+    if (!card) throw new Error("Expected event card was not rendered");
+    const down = new MouseEvent("pointerdown", { bubbles: true, cancelable: true });
+    Object.defineProperties(down, { pointerId: { value: 8 }, pointerType: { value: "touch" }, clientY: { value: 120 } });
+    await act(async () => { card.dispatchEvent(down); });
+    expect(down.defaultPrevented).toBe(false);
+    const up = new MouseEvent("pointerup", { bubbles: true, cancelable: true });
+    Object.defineProperties(up, { pointerId: { value: 8 }, pointerType: { value: "touch" }, clientY: { value: 120 } });
+    await act(async () => { card.dispatchEvent(up); });
+    await click(card);
+    expect(container.querySelector(".time-adjust-controls")).not.toBeNull();
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+  });
+
   it("selects with one tap and changes time with the bottom-left arrow controls", async () => {
     await click(container.querySelector(".mode-toggle"));
     const card = container.querySelector(".event-card");
