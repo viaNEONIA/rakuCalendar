@@ -140,6 +140,19 @@ export function changeEventTime(event: CalendarEvent, mode: DragMode, deltaMinut
   return { ...event, endAt: new Date(nextEnd).toISOString() };
 }
 
+export function stepEventTimeOnQuarterGrid(
+  event: CalendarEvent,
+  mode: "move" | "resize-end",
+  direction: -1 | 1
+): CalendarEvent {
+  const currentTime = new Date(mode === "move" ? event.startAt : event.endAt);
+  const remainder = currentTime.getMinutes() % EVENT_TIME_INCREMENT_MINUTES;
+  const deltaMinutes = direction > 0
+    ? (remainder === 0 ? EVENT_TIME_INCREMENT_MINUTES : EVENT_TIME_INCREMENT_MINUTES - remainder)
+    : (remainder === 0 ? -EVENT_TIME_INCREMENT_MINUTES : -remainder);
+  return changeEventTime(event, mode, deltaMinutes, EVENT_TIME_INCREMENT_MINUTES);
+}
+
 export function dayKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
