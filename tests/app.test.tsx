@@ -30,7 +30,7 @@ async function pointer(element: Element, type: string, clientY: number) {
   Object.defineProperties(event, { pointerId: { value: 7 }, pointerType: { value: "touch" }, clientY: { value: clientY } });
   await act(async () => {
     element.dispatchEvent(event);
-    if (type === "pointerdown") await new Promise((resolve) => setTimeout(resolve, 340));
+    if (type === "pointerdown") await new Promise((resolve) => setTimeout(resolve, 450));
   });
 }
 
@@ -90,19 +90,37 @@ describe("calendar viewing and editing modes", () => {
     await click(container.querySelector(".mode-toggle"));
     expect(container.querySelector(".app-shell")?.classList.contains("is-edit-mode")).toBe(true);
     expect(container.querySelector(".add-button")).not.toBeNull();
-    expect(container.querySelectorAll(".resize-handle")).toHaveLength(4);
+    expect(container.querySelectorAll(".resize-handle")).toHaveLength(0);
 
+    await click(container.querySelector(".event-card"));
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.querySelector(".time-adjust-controls")).not.toBeNull();
     await click(container.querySelector(".event-card"));
     expect(container.querySelector('[role="dialog"] h2')?.textContent).toBe("予定を編集");
     expect(container.querySelectorAll(".color-swatch")).toHaveLength(8);
     await click(container.querySelector('[aria-label="閉じる"]'));
 
     await click(container.querySelector(".add-button"));
-    const timeInputs = Array.from(container.querySelectorAll<HTMLInputElement>('input[name="startAt"], input[name="endAt"]'));
-    expect(timeInputs.map((input) => input.step)).toEqual(["900", "900"]);
-    expect(timeInputs[0].value.slice(-2)).toMatch(/^(00|15|30|45)$/);
-    expect(timeInputs[1].value.slice(-2)).toMatch(/^(00|15|30|45)$/);
-    expect(new Date(timeInputs[1].value).getTime() - new Date(timeInputs[0].value).getTime()).toBe(30 * 60_000);
+    const timeInputs = Array.from(container.querySelectorAll<HTMLInputElement>('input[name="startHour"], input[name="startMinute"], input[name="endHour"], input[name="endMinute"]'));
+    expect(timeInputs.map((input) => input.type)).toEqual(["number", "number", "number", "number"]);
+    expect(container.querySelector<HTMLInputElement>('input[name="startMinute"]')?.step).toBe("15");
+    expect(container.querySelector<HTMLInputElement>('input[name="endMinute"]')?.step).toBe("15");
+    const startMinute = Number(container.querySelector<HTMLInputElement>('input[name="startHour"]')?.value) * 60 + Number(container.querySelector<HTMLInputElement>('input[name="startMinute"]')?.value);
+    const endMinute = Number(container.querySelector<HTMLInputElement>('input[name="endHour"]')?.value) * 60 + Number(container.querySelector<HTMLInputElement>('input[name="endMinute"]')?.value);
+    expect(endMinute - startMinute).toBe(30);
+  });
+
+  it("selects with one tap and changes time with the bottom-left arrow controls", async () => {
+    await click(container.querySelector(".mode-toggle"));
+    const card = container.querySelector(".event-card");
+    await click(card);
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.querySelector(".event-shell")?.classList.contains("is-selected")).toBe(true);
+    await click(container.querySelector('[aria-label="15分後へ"]'));
+    const saved = storageState.saved.find((item) => item.id === "mode-test-event");
+    expect(saved).toBeDefined();
+    expect(new Date(saved!.startAt).getMinutes()).toBe(15);
+    expect(new Date(saved!.endAt).getMinutes()).toBe(45);
   });
 
   it("jumps to the next day that has a scheduled event", async () => {
@@ -117,13 +135,13 @@ describe("calendar viewing and editing modes", () => {
   it("allows deliberate overlap when times are entered in the edit form", async () => {
     await click(container.querySelector(".mode-toggle"));
     await click(container.querySelector(".event-card"));
-    const startInput = container.querySelector<HTMLInputElement>('input[name="startAt"]');
-    const endInput = container.querySelector<HTMLInputElement>('input[name="endAt"]');
+    await click(container.querySelector(".event-card"));
+    const startMinute = container.querySelector<HTMLInputElement>('input[name="startMinute"]');
+    const endMinute = container.querySelector<HTMLInputElement>('input[name="endMinute"]');
     const form = container.querySelector<HTMLFormElement>(".event-form");
-    if (!startInput || !endInput || !form) throw new Error("Expected edit form fields were not rendered");
-    const date = startInput.value.slice(0, 10);
-    startInput.value = `${date}T10:15`;
-    endInput.value = `${date}T10:45`;
+    if (!startMinute || !endMinute || !form) throw new Error("Expected edit form fields were not rendered");
+    startMinute.value = "15";
+    endMinute.value = "45";
     await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
     expect(storageState.saved).toHaveLength(1);
     expect(new Date(storageState.saved[0].startAt).getTime()).toBeLessThan(new Date(storageState.events[0].endAt).getTime());

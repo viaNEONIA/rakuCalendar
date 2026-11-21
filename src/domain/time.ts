@@ -100,6 +100,24 @@ export function resolveDragOverlaps(
   return valid[0] ?? original;
 }
 
+export function nudgeEventWithoutOverlap(event: CalendarEvent, direction: -1 | 1, otherEvents: CalendarEvent[]): CalendarEvent {
+  const duration = Date.parse(event.endAt) - Date.parse(event.startAt);
+  const step = EVENT_TIME_INCREMENT_MINUTES * 60_000;
+  let candidate = changeEventTime(event, "move", direction * EVENT_TIME_INCREMENT_MINUTES, EVENT_TIME_INCREMENT_MINUTES);
+  const overlaps = (value: CalendarEvent) => otherEvents.filter((other) =>
+    Date.parse(value.startAt) < Date.parse(other.endAt) && Date.parse(value.endAt) > Date.parse(other.startAt)
+  );
+  for (let attempt = 0; attempt <= otherEvents.length; attempt += 1) {
+    const collisions = overlaps(candidate);
+    if (!collisions.length) return candidate;
+    const nextStart = direction > 0
+      ? Math.ceil(Math.max(...collisions.map((other) => Date.parse(other.endAt))) / step) * step
+      : Math.floor((Math.min(...collisions.map((other) => Date.parse(other.startAt))) - duration) / step) * step;
+    candidate = { ...event, startAt: new Date(nextStart).toISOString(), endAt: new Date(nextStart + duration).toISOString() };
+  }
+  return event;
+}
+
 export function nextScheduledDay(events: CalendarEvent[], selectedDay: string): string | undefined {
   const day = dateFromKey(selectedDay);
   day.setDate(day.getDate() + 1);

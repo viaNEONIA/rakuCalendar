@@ -104,3 +104,17 @@ button { touch-action: manipulation; }
 .secondary-button { margin-left: auto; background: #f0f2f7; color: #5b6780; }
 .save-button { background: #4969df; color: white; }
 @media (min-width: 600px) { .dialog-backdrop { align-items: center; padding: 20px; } .event-dialog, .settings-panel { border-radius: 22px; } }
+
+.event-shell.is-selected .event-card { outline: 3px solid #4969df; outline-offset: 2px; z-index: 3; }
+.time-adjust-controls { position: absolute; z-index: 5; left: 14px; bottom: calc(18px + env(safe-area-inset-bottom)); display: grid; gap: 8px; }
+.time-adjust-controls button { width: 52px; height: 52px; border: 0; border-radius: 17px; background: #4969df; color: white; box-shadow: 0 6px 18px #31497e38; font-size: 27px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
+.undo-bar { bottom: calc(134px + env(safe-area-inset-bottom)); left: 12px; max-width: calc(100% - 24px); flex-wrap: wrap; }
+.time-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.time-field { min-width: 0; margin: 0; padding: 0; border: 0; }
+.time-field legend { margin-bottom: 6px; color: #52617a; font-size: 12px; font-weight: 650; }
+.time-field > input[type="date"] { min-height: 44px; padding: 6px 8px; font-size: 13px; }
+.numeric-time { display: flex; align-items: end; gap: 4px; margin-top: 6px; }
+.numeric-time label { flex: 1; min-width: 0; display: grid; gap: 3px; color: #687793; font-size: 10px; }
+.numeric-time input { min-height: 44px; padding: 6px 4px; text-align: center; font-size: 17px; font-variant-numeric: tabular-nums; }
+.numeric-time > span { padding-bottom: 11px; color: #687793; font-weight: 700; }
+@media (max-width: 380px) { .event-dialog { padding-inline: 14px; } .time-fields { gap: 6px; } .time-field > input[type="date"] { font-size: 11px; } }
