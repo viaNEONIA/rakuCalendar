@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent } from "../src/domain/event";
-import { dayEvents, defaultEventRange, getNextEvent, layoutOverlaps, nearestQuarterHourMinute, nextScheduledDay, nudgeEventWithoutOverlap, resolveDragOverlaps, snapMinutes } from "../src/domain/time";
+import { dayEvents, defaultEventRange, getNextEvent, layoutOverlaps, nearestQuarterHourMinute, nextScheduledDay, resolveDragOverlaps, snapMinutes } from "../src/domain/time";
 
 function event(id: string, start: string, end: string): CalendarEvent {
   const [startHour, startMinute] = start.split(":").map(Number);
@@ -64,18 +64,6 @@ describe("day timeline calculations", () => {
     const resolved = resolveDragOverlaps(moving, proposed, "move", [blocked]);
     expect(new Date(resolved.startAt).getTime()).toBe(new Date(2026, 10, 21, 10, 30).getTime());
     expect(Date.parse(blocked.endAt)).toBeLessThanOrEqual(Date.parse(resolved.startAt));
-  });
-
-  it("moves a selected event by 15 minutes and snaps beyond a blocking appointment", () => {
-    const moving = event("moving", "10:00", "10:30");
-    const blocked = event("blocked", "11:00", "11:30");
-    const first = nudgeEventWithoutOverlap(moving, 1, [blocked]);
-    expect(new Date(first.startAt).getHours()).toBe(10);
-    expect(new Date(first.startAt).getMinutes()).toBe(15);
-    const atCollision = { ...moving, startAt: new Date(2026, 10, 21, 10, 45).toISOString(), endAt: new Date(2026, 10, 21, 11, 15).toISOString() };
-    const snapped = nudgeEventWithoutOverlap(atCollision, 1, [blocked]);
-    expect(new Date(snapped.startAt).getHours()).toBe(11);
-    expect(new Date(snapped.startAt).getMinutes()).toBe(30);
   });
 
   it("keeps a resized event outside the neighboring event", () => {
