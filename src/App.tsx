@@ -5,7 +5,7 @@ import type { CalendarEvent, CalendarSettings } from "./domain/event";
 import { makeBackup, parseBackup } from "./domain/backup";
 import type { CalendarBackup } from "./domain/backup";
 import { createICalendar } from "./domain/ical";
-import { changeEventTime, dayEvents, dateFromKey, dayKey, EVENT_TIME_INCREMENT_MINUTES, getNextEvent, layoutOverlaps, localDateTime, nearestQuarterHourMinute, defaultEventRange, hasPointerScrollIntent, nextAvailableEventRange, nextScheduledDay, pointerScrollDelta, resolveDragOverlaps, snapMinutes } from "./domain/time";
+import { changeEventTime, dayEvents, dateFromKey, dayKey, EVENT_TIME_INCREMENT_MINUTES, getNextEvent, layoutOverlaps, localDateTime, nearestQuarterHourMinute, defaultEventRange, hasPointerScrollIntent, nextAvailableEventRange, pointerScrollDelta, resolveDragOverlaps, snapMinutes } from "./domain/time";
 import type { DragMode } from "./domain/time";
 import { deleteEvent, getSettings, listEvents, restoreData, saveEvent, saveSettings } from "./storage/database";
 
@@ -45,6 +45,8 @@ export function App() {
   const [editing, setEditing] = useState<CalendarEvent | null>(null);
   const [viewingEvent, setViewingEvent] = useState<CalendarEvent | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [navigationCursorId, setNavigationCursorId] = useState<string | null>(null);
+  const [pendingScrollStart, setPendingScrollStart] = useState<string | null>(null);
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [loaded, setLoaded] = useState(false);
   const [settings, setSettings] = useState<CalendarSettings>(DEFAULT_SETTINGS);
@@ -72,6 +74,17 @@ export function App() {
   const positioned = useMemo(() => layoutOverlaps(visibleEvents), [visibleEvents]);
   const nextEvent = useMemo(() => getNextEvent(dayEvents(events, current), now), [events, now, selectedDay]);
   const isToday = selectedDay === dayKey(now);
+  const chronologicalEvents = useMemo(() => [...events].sort((left, right) => Date.parse(left.startAt) - Date.parse(right.startAt)), [events]);
+  const selectedDateStart = dateFromKey(selectedDay).getTime();
+  const navigationCursorIndex = navigationCursorId ? chronologicalEvents.findIndex((event) => event.id === navigationCursorId) : -1;
+  const nextNavigationAnchor = isToday ? now.getTime() : selectedDateStart - 1;
+  const previousNavigationAnchor = isToday ? now.getTime() : selectedDateStart;
+  const nextAppointment = navigationCursorIndex >= 0
+    ? chronologicalEvents[navigationCursorIndex + 1]
+    : chronologicalEvents.find((event) => Date.parse(event.startAt) > nextNavigationAnchor);
+  const previousAppointment = navigationCursorIndex >= 0
+    ? chronologicalEvents[navigationCursorIndex - 1]
+    : [...chronologicalEvents].reverse().find((event) => Date.parse(event.startAt) < previousNavigationAnchor);
 
   useEffect(() => {
     void Promise.all([listEvents(), getSettings()]).then(([savedEvents, savedSettings]) => { setEvents(savedEvents); setSettings(savedSettings); }).finally(() => setLoaded(true));
@@ -82,15 +95,35 @@ export function App() {
   useEffect(() => { if (loaded) void saveSettings(settings); }, [settings, loaded]);
 
   useEffect(() => {
+    if (!pendingScrollStart) return;
+    const target = new Date(pendingScrollStart);
+    if (dayKey(target) !== selectedDay || !timelineRef.current) return;
+    const minute = target.getHours() * 60 + target.getMinutes();
+    timelineRef.current.scrollTop = Math.max(0, (minute - settings.displayStartHour * 60) * HOUR_HEIGHT / 60 - 80);
+    setPendingScrollStart(null);
+  }, [pendingScrollStart, selectedDay, settings.displayStartHour]);
+
+  useEffect(() => {
     if (!loaded || !isToday || !timelineRef.current) return;
     const minute = now.getHours() * 60 + now.getMinutes();
     timelineRef.current.scrollTop = Math.max(0, (minute - settings.displayStartHour * 60) * HOUR_HEIGHT / 60 - 30 * HOUR_HEIGHT / 60);
   }, [loaded]);
 
+  function toggleMode() {
+    const nextMode = mode === "view" ? "edit" : "view";
+    if (nextMode === "view") {
+      if (dragSeed.current?.timer) window.clearTimeout(dragSeed.current.timer);
+      dragSeed.current = null; dragRef.current = null; suppressClick.current = false; setDragPreview(null); setSelectedEventId(null); lastTap.current = null;
+    }
+    setMode(nextMode);
+  }
+
   const changeDay = (delta: number) => {
     const next = dateFromKey(selectedDay);
     next.setDate(next.getDate() + delta);
     setSelectedDay(dayKey(next));
+    setNavigationCursorId(null);
+    setPendingScrollStart(null);
   };
 
   async function persist(event: CalendarEvent) {
@@ -299,35 +332,38 @@ export function App() {
     setSelectedEventId(event.id);
   }
 
+  function goToAppointment(event?: CalendarEvent) {
+    if (!event) return;
+    setNavigationCursorId(event.id);
+    setSelectedDay(dayKey(new Date(event.startAt)));
+    setPendingScrollStart(event.startAt);
+  }
+
+  function showCurrentTime() {
+    setNavigationCursorId(null);
+    setSelectedDay(dayKey(now));
+    setPendingScrollStart(now.toISOString());
+  }
+
   function jumpToNext() {
-    if (!nextEvent || !timelineRef.current) return;
-    const start = new Date(nextEvent.startAt);
-    timelineRef.current.scrollTo({ top: Math.max(0, (start.getHours() * 60 + start.getMinutes() - settings.displayStartHour * 60) * HOUR_HEIGHT / 60 - 80), behavior: "smooth" });
+    goToAppointment(nextEvent);
   }
 
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const colorOptions = editing?.color && !EVENT_COLOR_PALETTE.some((color) => color.value.toLowerCase() === editing.color?.toLowerCase())
     ? [...EVENT_COLOR_PALETTE, { name: "現在の色", value: editing.color }]
     : EVENT_COLOR_PALETTE;
-  const nextScheduleDate = nextScheduledDay(events, selectedDay);
 
   return <div className={`app-shell${mode === "edit" ? " is-edit-mode" : ""}`}>
     <header className="topbar">
-      <div className="brand-line"><span className="mini-mark">r</span><strong>rakuCalendar</strong><button className={`mode-toggle${mode === "edit" ? " is-editing" : ""}`} aria-pressed={mode === "edit"} aria-label={mode === "view" ? "編集モードへ切り替え" : "閲覧モードへ切り替え"} onClick={() => {
-        const nextMode = mode === "view" ? "edit" : "view";
-        if (nextMode === "view") {
-          if (dragSeed.current?.timer) window.clearTimeout(dragSeed.current.timer);
-          dragSeed.current = null; dragRef.current = null; suppressClick.current = false; setDragPreview(null); setSelectedEventId(null); lastTap.current = null;
-        }
-        setMode(nextMode);
-      }}>{mode === "view" ? "閲覧" : "編集"}</button><button className="icon-button settings-button" aria-label="設定" onClick={() => setSettingsOpen(true)}>⚙</button></div>
+      <div className="brand-line"><span className="mini-mark">r</span><strong>rakuCalendar</strong><button className="icon-button settings-button" aria-label="設定" onClick={() => setSettingsOpen(true)}>⚙</button></div>
       <div className="date-controls">
         <button className="icon-button" aria-label="前日" onClick={() => changeDay(-1)}>‹</button>
-        <label className="date-label"><span>{day.toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" })}</span><input aria-label="表示日" type="date" value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} /></label>
+        <label className="date-label"><span>{day.toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" })}</span><input aria-label="表示日" type="date" value={selectedDay} onChange={(e) => { setSelectedDay(e.target.value); setNavigationCursorId(null); setPendingScrollStart(null); }} /></label>
         <button className="icon-button" aria-label="翌日" onClick={() => changeDay(1)}>›</button>
-        <button className="today-button" onClick={() => setSelectedDay(dayKey(new Date()))}>今日</button>
+        <button className="today-button" onClick={() => { setSelectedDay(dayKey(new Date())); setNavigationCursorId(null); setPendingScrollStart(null); }}>今日</button>
       </div>
-      {nextScheduleDate && <div className="scheduled-day-row"><button className="scheduled-day-button" onClick={() => setSelectedDay(nextScheduleDate)}>次の予定がある日へ · {dateFromKey(nextScheduleDate).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric", weekday: "short" })}</button></div>}
+      <div className="scheduled-day-row"><button className="scheduled-day-button" aria-label="前の予定" disabled={!previousAppointment} onClick={() => goToAppointment(previousAppointment)}>‹ 前の予定</button><button className="scheduled-day-button" aria-label="次の予定" disabled={!nextAppointment} onClick={() => goToAppointment(nextAppointment)}>次の予定 ›</button></div>
     </header>
 
     {settings.showNextEvent && <section className="next-card" onClick={jumpToNext} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); jumpToNext(); } }} role="button" tabIndex={0} aria-label="次の予定へ移動">
@@ -382,7 +418,7 @@ export function App() {
       {visibleEvents.length === 0 && <p className="empty-day">{mode === "edit" ? "空き時間をタップするか、右下の＋から予定を追加できます。" : "この日に予定はありません。予定を追加するには編集モードに切り替えてください。"}</p>}
     </main>
     {mode === "edit" && selectedEventId && visibleEvents.some((event) => event.id === selectedEventId) && <div className="time-adjust-controls" aria-label="予定時刻の調整"><div className="time-adjust-group"><span>時間帯移動</span><button aria-label="15分前へ" title="15分前へ" onClick={() => void adjustSelectedTime(-1, "move")}>↑</button><button aria-label="15分後へ" title="15分後へ" onClick={() => void adjustSelectedTime(1, "move")}>↓</button></div><div className="time-adjust-group"><span>予定時間</span><button aria-label="15分延長" title="15分延長" onClick={() => void adjustSelectedTime(1, "duration")}>＋</button><button aria-label="15分短縮" title="15分短縮" onClick={() => void adjustSelectedTime(-1, "duration")}>−</button></div></div>}
-    <button className="now-button" aria-label="現在時刻へ" onClick={() => { if (timelineRef.current) timelineRef.current.scrollTo({ top: Math.max(0, (nowMinutes - settings.displayStartHour * 60) * HOUR_HEIGHT / 60 - 36), behavior: "smooth" }); }}>今</button>
+    <button className="now-button" aria-label="今の時間帯を表示" onClick={showCurrentTime}>今の時間帯</button><button className={`mode-toggle floating-mode-toggle${mode === "edit" ? " is-editing" : ""}`} aria-pressed={mode === "edit"} aria-label={mode === "view" ? "編集モードへ切り替え" : "閲覧モードへ切り替え"} onClick={toggleMode}>{mode === "view" ? "閲覧" : "編集"}</button>
     {mode === "edit" && <button className="add-button" aria-label="予定を追加" onClick={() => setEditing(makeInitialEvent(dateFromKey(selectedDay), new Date(), events))}>＋</button>}
     {undoVisible && <div className="undo-bar" role="status"><span>時間を変更しました</span><button onClick={() => void travelHistory("undo")} disabled={historyIndex.current <= 0}>元に戻す</button><button onClick={() => void travelHistory("redo")} disabled={historyIndex.current >= history.current.length}>やり直す</button></div>}
 

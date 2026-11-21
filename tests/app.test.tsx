@@ -79,6 +79,8 @@ describe("calendar viewing and editing modes", () => {
 
   it("keeps schedule changes out of viewing mode and exposes them in editing mode", async () => {
     expect(container.querySelector(".mode-toggle")?.textContent).toBe("閲覧");
+    expect(container.querySelector(".brand-line .mode-toggle")).toBeNull();
+    expect(container.querySelector(".now-button")?.textContent).toBe("今の時間帯");
     expect(container.querySelector(".add-button")).toBeNull();
     expect(container.querySelector(".resize-handle")).toBeNull();
 
@@ -163,13 +165,16 @@ describe("calendar viewing and editing modes", () => {
     expect(shortened.endAt).toBe(original.endAt);
   });
 
-  it("jumps to the next day that has a scheduled event", async () => {
+  it("navigates to previous and next appointments across dates", async () => {
     const today = new Date();
     const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-    const expected = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
-    await click(container.querySelector(".scheduled-day-button"));
-    expect(container.querySelector<HTMLInputElement>('[aria-label="表示日"]')?.value).toBe(expected);
-    expect(container.querySelector(".event-card")?.textContent).toContain("翌日の予定");
+    await click(container.querySelector('[aria-label="翌日"]'));
+    await click(container.querySelector('[aria-label="前の予定"]'));
+    const todayKey = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, "0"), String(today.getDate()).padStart(2, "0")].join("-");
+    expect(container.querySelector<HTMLInputElement>('[aria-label="表示日"]')?.value).toBe(todayKey);
+    await click(container.querySelector('[aria-label="次の予定"]'));
+    const tomorrowKey = [tomorrow.getFullYear(), String(tomorrow.getMonth() + 1).padStart(2, "0"), String(tomorrow.getDate()).padStart(2, "0")].join("-");
+    expect(container.querySelector<HTMLInputElement>('[aria-label="表示日"]')?.value).toBe(tomorrowKey);
   });
 
   it("allows deliberate overlap when times are entered in the edit form", async () => {
