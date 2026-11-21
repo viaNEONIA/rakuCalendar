@@ -40,5 +40,5 @@ export function parseBackup(text: string): CalendarBackup {
 }
 
 export function eventsEqual(a: CalendarEvent, b: CalendarEvent): boolean {
-  return a.id === b.id && a.title === b.title && a.destination === b.destination && a.startAt === b.startAt && a.endAt === b.endAt && a.memo === b.memo && a.color === b.color;
+  return a.id === b.id && a.title === b.title && a.destination === b.destination && a.startAt === b.startAt && a.endAt === b.endAt && a.memo === b.memo && a.color === b.color && Boolean(a.pinned) === Boolean(b.pinned);
 }

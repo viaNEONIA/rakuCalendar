@@ -6,7 +6,7 @@ import type { CalendarEvent } from "../src/domain/event";
 import { getSettings, listEvents, restoreData } from "../src/storage/database";
 
 const sample: CalendarEvent = {
-  id: "a", title: "予定A", destination: "駅", startAt: "2026-11-21T00:00:00.000Z", endAt: "2026-11-21T00:30:00.000Z", memo: "", createdAt: "2026-11-20T00:00:00.000Z", updatedAt: "2026-11-20T00:00:00.000Z"
+  id: "a", title: "予定A", destination: "駅", startAt: "2026-11-21T00:00:00.000Z", endAt: "2026-11-21T00:30:00.000Z", memo: "", pinned: true, createdAt: "2026-11-20T00:00:00.000Z", updatedAt: "2026-11-20T00:00:00.000Z"
 };
 
 function deleteDb() {

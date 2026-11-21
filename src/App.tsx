@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FormEvent, PointerEvent as ReactPointerEvent } from "react";
-import { DEFAULT_EVENT_COLOR, DEFAULT_SETTINGS, EVENT_COLOR_PALETTE } from "./domain/event";
+import { DEFAULT_EVENT_COLOR, DEFAULT_SETTINGS, getEventColorOptions, getNextEventColor } from "./domain/event";
 import type { CalendarEvent, CalendarSettings } from "./domain/event";
 import { makeBackup, parseBackup } from "./domain/backup";
 import type { CalendarBackup } from "./domain/backup";
@@ -30,7 +30,7 @@ function makeInitialEvent(day: Date, now: Date, events: CalendarEvent[]): Calend
   const { start, end } = defaultEventRange(day, now, events);
   return {
     id: crypto.randomUUID(), title: "", destination: "", startAt: localDateTime(start), endAt: localDateTime(end),
-    memo: "", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    memo: "", color: getNextEventColor(events), pinned: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
   };
 }
 
@@ -73,8 +73,11 @@ export function App() {
   const visibleEvents = useMemo(() => todaysEvents.filter((event) => Date.parse(event.startAt) < displayEnd.getTime() && Date.parse(event.endAt) > displayStart.getTime()), [todaysEvents, settings.displayStartHour, settings.displayEndHour]);
   const positioned = useMemo(() => layoutOverlaps(visibleEvents), [visibleEvents]);
   const nextEvent = useMemo(() => getNextEvent(dayEvents(events, current), now), [events, now, selectedDay]);
-  const isToday = selectedDay === dayKey(now);
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const tomorrowEvents = useMemo(() => dayEvents(events, tomorrow), [events, now]);
   const chronologicalEvents = useMemo(() => [...events].sort((left, right) => Date.parse(left.startAt) - Date.parse(right.startAt)), [events]);
+  const pinnedEvents = useMemo(() => chronologicalEvents.filter((event) => event.pinned), [chronologicalEvents]);
+  const isToday = selectedDay === dayKey(now);
   const selectedDateStart = dateFromKey(selectedDay).getTime();
   const navigationCursorIndex = navigationCursorId ? chronologicalEvents.findIndex((event) => event.id === navigationCursorId) : -1;
   const nextNavigationAnchor = isToday ? now.getTime() : selectedDateStart - 1;
@@ -301,7 +304,7 @@ export function App() {
       window.alert("終了時刻は開始時刻より後にしてください。");
       return;
     }
-    void persist({ ...editing, title: String(form.get("title")).trim(), destination: String(form.get("destination")).trim(), startAt: start.toISOString(), endAt: end.toISOString(), memo: String(form.get("memo")).trim(), color: String(form.get("color")), updatedAt: new Date().toISOString() });
+    void persist({ ...editing, title: String(form.get("title")).trim(), destination: String(form.get("destination")).trim(), startAt: start.toISOString(), endAt: end.toISOString(), memo: String(form.get("memo")).trim(), color: String(form.get("color")), pinned: form.get("pinned") === "on", updatedAt: new Date().toISOString() });
   }
 
   async function adjustSelectedTime(direction: -1 | 1, adjustment: "move" | "duration" = "move") {
@@ -349,10 +352,26 @@ export function App() {
     goToAppointment(nextEvent);
   }
 
+  async function togglePinned(event: CalendarEvent) {
+    const updated = { ...event, pinned: !event.pinned, updatedAt: new Date().toISOString() };
+    await saveEvent(updated);
+    setEvents((items) => items.map((item) => item.id === updated.id ? updated : item));
+    setViewingEvent((item) => item?.id === updated.id ? updated : item);
+    setEditing((item) => item?.id === updated.id ? updated : item);
+  }
+
+  function jumpToPinned() {
+    if (pinnedEvents.length === 0) return;
+    const currentIndex = navigationCursorId ? pinnedEvents.findIndex((event) => event.id === navigationCursorId) : -1;
+    const nextPinned = currentIndex >= 0
+      ? pinnedEvents[(currentIndex + 1) % pinnedEvents.length]
+      : pinnedEvents.find((event) => Date.parse(event.startAt) >= now.getTime()) ?? pinnedEvents[0];
+    goToAppointment(nextPinned);
+  }
+
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
-  const colorOptions = editing?.color && !EVENT_COLOR_PALETTE.some((color) => color.value.toLowerCase() === editing.color?.toLowerCase())
-    ? [...EVENT_COLOR_PALETTE, { name: "現在の色", value: editing.color }]
-    : EVENT_COLOR_PALETTE;
+  const colorOptions = editing ? getEventColorOptions(events, editing) : [];
+  const editingColor = editing ? editing.color ?? getNextEventColor(events, editing.id) : DEFAULT_EVENT_COLOR;
 
   return <div className={`app-shell${mode === "edit" ? " is-edit-mode" : ""}`}>
     <header className="topbar">
@@ -361,15 +380,18 @@ export function App() {
         <button className="icon-button" aria-label="前日" onClick={() => changeDay(-1)}>‹</button>
         <label className="date-label"><span>{day.toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" })}</span><input aria-label="表示日" type="date" value={selectedDay} onChange={(e) => { setSelectedDay(e.target.value); setNavigationCursorId(null); setPendingScrollStart(null); }} /></label>
         <button className="icon-button" aria-label="翌日" onClick={() => changeDay(1)}>›</button>
-        <button className="today-button" onClick={() => { setSelectedDay(dayKey(new Date())); setNavigationCursorId(null); setPendingScrollStart(null); }}>今日</button>
+        <button className="today-button pin-navigation-button" aria-label="ピン留め予定へ" title="ピン留め予定へ" disabled={pinnedEvents.length === 0} onClick={jumpToPinned}>📌</button>
       </div>
       <div className="scheduled-day-row"><button className="scheduled-day-button" aria-label="前の予定" disabled={!previousAppointment} onClick={() => goToAppointment(previousAppointment)}>‹ 前の予定</button><button className="scheduled-day-button" aria-label="次の予定" disabled={!nextAppointment} onClick={() => goToAppointment(nextAppointment)}>次の予定 ›</button></div>
     </header>
 
-    {settings.showNextEvent && <section className="next-card" onClick={jumpToNext} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); jumpToNext(); } }} role="button" tabIndex={0} aria-label="次の予定へ移動">
+    {settings.showNextEvent && (isToday && !nextEvent ? <section className="next-card tomorrow-card" aria-label="明日の予定">
+      <strong className="next-label">本日の予定完了、お疲れさまでした</strong><span className="tomorrow-label">明日の予定</span>
+      {tomorrowEvents.length ? <ul className="tomorrow-list">{tomorrowEvents.map((event) => <li key={event.id}><button onClick={() => goToAppointment(event)}><span>{formatTime(event.startAt)}–{formatTime(event.endAt)}</span><strong>{event.title}</strong></button></li>)}</ul> : <span className="next-empty">明日の予定はありません</span>}
+    </section> : <section className="next-card" onClick={jumpToNext} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); jumpToNext(); } }} role="button" tabIndex={0} aria-label="次の予定へ移動">
       <span className="next-label">{nextEvent ? (Date.parse(nextEvent.startAt) <= now.getTime() ? "進行中の予定" : "次の予定") : "これからの予定"}</span>
       {nextEvent ? <><strong>{nextEvent.title}</strong><span className="next-time">{formatTime(nextEvent.startAt)}{nextEvent.destination && ` · ${nextEvent.destination}`}</span></> : <span className="next-empty">予定はありません</span>}
-    </section>}
+    </section>)}
     {settings.backupReminderDays > 0 && (!settings.lastBackupCreatedAt || Date.now() - Date.parse(settings.lastBackupCreatedAt) >= settings.backupReminderDays * 86_400_000) && <div className="backup-notice">バックアップの作成時期です <button onClick={() => setSettingsOpen(true)}>設定を開く</button></div>}
 
     <main className="timeline" ref={timelineRef} aria-label="1日の予定" onClick={(e) => {
@@ -381,7 +403,8 @@ export function App() {
       const start = dateFromKey(selectedDay);
       start.setHours(Math.floor(minute / 60), minute % 60, 0, 0);
       const { start: availableStart, end } = nextAvailableEventRange(start, events);
-      const created = makeInitialEvent(dateFromKey(selectedDay), availableStart, []);
+      const created = makeInitialEvent(dateFromKey(selectedDay), availableStart, events);
+      created.title = "移動";
       created.startAt = localDateTime(availableStart);
       created.endAt = localDateTime(end);
       setEditing(created);
@@ -409,7 +432,7 @@ export function App() {
           return <div key={event.id} className={`event-shell${isDragging ? " is-dragging" : ""}${selectedEventId === event.id ? " is-selected" : ""}`} style={{ ...shellStyle, "--event-color": shownEvent.color || DEFAULT_EVENT_COLOR } as CSSProperties} onPointerMove={mode === "edit" ? movePointer : undefined} onPointerUp={mode === "edit" ? (e) => void finishPointer(e) : undefined} onPointerCancel={mode === "edit" ? () => { if (dragSeed.current?.timer) window.clearTimeout(dragSeed.current.timer); dragSeed.current = null; dragRef.current = null; suppressClick.current = false; setDragPreview(null); setSelectedEventId(null); lastTap.current = null; } : undefined}>
             {isDragging && <div className="event-ghost" style={{ top: old.top - currentGeometry.top, height: old.height }} />}
             <button className="event-card" onPointerDown={mode === "edit" ? (e) => startPointer(e, event, "move") : undefined} onClick={() => onEventTap(event)} aria-label={`${event.title} ${formatTime(visibleStart.toISOString())}から${formatTime(visibleEnd.toISOString())}`}>
-              <strong>{shownEvent.title}</strong><span>{formatTime(visibleStart.toISOString())}–{formatTime(visibleEnd.toISOString())}</span>{shownEvent.destination && <small>{shownEvent.destination}</small>}
+              <strong>{shownEvent.title}{shownEvent.pinned ? <span className="event-pin" aria-label="ピン留め">📌</span> : null}</strong><span>{formatTime(visibleStart.toISOString())}–{formatTime(visibleEnd.toISOString())}</span>{shownEvent.destination && <small>{shownEvent.destination}</small>}
             </button>
           </div>;
         })}
@@ -437,10 +460,10 @@ export function App() {
       <button className="secondary-button settings-done" onClick={() => { setSettingsOpen(false); setBackupPreview(null); }}>閉じる</button>
     </section></div>}
 
-    {viewingEvent && <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setViewingEvent(null); }}><section className="event-dialog" role="dialog" aria-modal="true" aria-labelledby="view-event-title"><div className="dialog-head"><h2 id="view-event-title">予定の詳細</h2><button className="icon-button" onClick={() => setViewingEvent(null)} aria-label="閉じる">×</button></div><div className="event-details"><strong>{viewingEvent.title}</strong><p>{new Date(viewingEvent.startAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" })}–{formatTime(viewingEvent.endAt)}</p>{viewingEvent.destination && <p>行先: {viewingEvent.destination}</p>}{viewingEvent.memo && <p className="event-detail-memo">{viewingEvent.memo}</p>}<button className="secondary-button settings-done" onClick={() => setViewingEvent(null)}>閉じる</button></div></section></div>}
+    {viewingEvent && <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setViewingEvent(null); }}><section className="event-dialog" role="dialog" aria-modal="true" aria-labelledby="view-event-title"><div className="dialog-head"><h2 id="view-event-title">予定の詳細</h2><button className="icon-button" onClick={() => setViewingEvent(null)} aria-label="閉じる">×</button></div><div className="event-details"><strong>{viewingEvent.title}</strong><p>{new Date(viewingEvent.startAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" })}–{formatTime(viewingEvent.endAt)}</p>{viewingEvent.destination && <p>行先: {viewingEvent.destination}</p>}{viewingEvent.memo && <p className="event-detail-memo">{viewingEvent.memo}</p>}<button className="secondary-button settings-done" onClick={() => void togglePinned(viewingEvent)}>{viewingEvent.pinned ? "ピン留めを解除" : "📌 ピン留め"}</button><button className="secondary-button settings-done" onClick={() => setViewingEvent(null)}>閉じる</button></div></section></div>}
 
     {editing && <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setEditing(null); }}><section className="event-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div className="dialog-head"><h2 id="dialog-title">{events.some((e) => e.id === editing.id) ? "予定を編集" : "予定を追加"}</h2><button className="icon-button" onClick={() => setEditing(null)} aria-label="閉じる">×</button></div>
-      <form onSubmit={submitForm} className="event-form"><label>予定内容<input name="title" required maxLength={120} autoFocus defaultValue={editing.title} /></label><label>行先（任意）<input name="destination" maxLength={120} defaultValue={editing.destination} /></label><div className="time-fields">{(["start", "end"] as const).map((prefix) => { const value = new Date(prefix === "start" ? editing.startAt : editing.endAt); const existing = events.some((item) => item.id === editing.id); const label = prefix === "start" ? "開始" : "終了"; return <fieldset className="time-field" key={prefix}><legend>{label}</legend><input aria-label={`${label}日付`} name={`${prefix}Date`} type="date" required defaultValue={`${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`} /><div className="numeric-time"><label>時<input aria-label={`${label}時`} name={`${prefix}Hour`} type="number" inputMode="numeric" min="0" max="23" required defaultValue={String(value.getHours()).padStart(2, "0")} /></label><span>:</span><label>分<input aria-label={`${label}分`} name={`${prefix}Minute`} type="number" inputMode="numeric" min="0" max="59" step={existing ? 1 : 15} required defaultValue={String(value.getMinutes()).padStart(2, "0")} /></label></div></fieldset>; })}</div><p className="time-entry-hint">ドラッグ操作では他の予定との重なりを避けます。重複させる場合は開始・終了時刻を直接指定してください。</p><fieldset className="color-palette"><legend>予定の色</legend><div className="color-swatch-grid">{colorOptions.map((color) => <label className="color-swatch" key={color.value}><input type="radio" name="color" value={color.value} defaultChecked={color.value.toLowerCase() === (editing.color ?? DEFAULT_EVENT_COLOR).toLowerCase()} /><span className="color-swatch-chip" style={{ "--swatch-color": color.value } as CSSProperties} /><small>{color.name}</small></label>)}</div></fieldset><label>メモ（任意）<textarea name="memo" rows={3} maxLength={2000} defaultValue={editing.memo} /></label><div className="form-actions">{events.some((e) => e.id === editing.id) && <button type="button" className="delete-button" onClick={() => void remove(editing.id)}>削除</button>}<button type="button" className="secondary-button" onClick={() => setEditing(null)}>キャンセル</button><button type="submit" className="save-button">保存</button></div></form>
+      <form onSubmit={submitForm} className="event-form"><label>予定内容<input name="title" required maxLength={120} autoFocus defaultValue={editing.title} /></label><label>行先（任意）<input name="destination" maxLength={120} defaultValue={editing.destination} /></label><div className="time-fields">{(["start", "end"] as const).map((prefix) => { const value = new Date(prefix === "start" ? editing.startAt : editing.endAt); const existing = events.some((item) => item.id === editing.id); const label = prefix === "start" ? "開始" : "終了"; return <fieldset className="time-field" key={prefix}><legend>{label}</legend><input aria-label={`${label}日付`} name={`${prefix}Date`} type="date" required defaultValue={`${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`} /><div className="numeric-time"><label>時<input aria-label={`${label}時`} name={`${prefix}Hour`} type="number" inputMode="numeric" min="0" max="23" required defaultValue={String(value.getHours()).padStart(2, "0")} /></label><span>:</span><label>分<input aria-label={`${label}分`} name={`${prefix}Minute`} type="number" inputMode="numeric" min="0" max="59" step={existing ? 1 : 15} required defaultValue={String(value.getMinutes()).padStart(2, "0")} /></label></div></fieldset>; })}</div><p className="time-entry-hint">ドラッグ操作では他の予定との重なりを避けます。重複させる場合は開始・終了時刻を直接指定してください。</p><fieldset className="color-palette"><legend>予定の色</legend><div className="color-swatch-grid">{colorOptions.map((color) => <label className="color-swatch" key={color.value}><input type="radio" name="color" value={color.value} defaultChecked={color.value.toLowerCase() === editingColor.toLowerCase()} /><span className="color-swatch-chip" style={{ "--swatch-color": color.value } as CSSProperties} /><small>{color.name}</small></label>)}</div></fieldset><label className="setting-check pin-event-option"><input type="checkbox" name="pinned" defaultChecked={Boolean(editing.pinned)} />📌 ピン留めする</label><label>メモ（任意）<textarea name="memo" rows={3} maxLength={2000} defaultValue={editing.memo} /></label><div className="form-actions">{events.some((e) => e.id === editing.id) && <button type="button" className="delete-button" onClick={() => void remove(editing.id)}>削除</button>}<button type="button" className="secondary-button" onClick={() => setEditing(null)}>キャンセル</button><button type="submit" className="save-button">保存</button></div></form>
     </section></div>}
   </div>;
 }

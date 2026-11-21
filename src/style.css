@@ -122,3 +122,13 @@ button { touch-action: manipulation; }
 .numeric-time input { min-height: 44px; padding: 6px 4px; text-align: center; font-size: 17px; font-variant-numeric: tabular-nums; }
 .numeric-time > span { padding-bottom: 11px; color: #687793; font-weight: 700; }
 @media (max-width: 380px) { .event-dialog { padding-inline: 14px; } .time-fields { gap: 6px; } .time-field > input[type="date"] { font-size: 11px; } }
+.pin-navigation-button { width: 40px; padding: 0; font-size: 17px; }
+.pin-navigation-button:disabled { opacity: .42; }
+.tomorrow-card { grid-template-columns: 1fr; align-content: start; gap: 6px; cursor: default; }
+.tomorrow-card .next-label { color: #46577c; font-size: 14px; }
+.tomorrow-label { color: #647394; font-size: 12px; font-weight: 700; }
+.tomorrow-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.tomorrow-list button { display: grid; grid-template-columns: 90px 1fr; width: 100%; gap: 8px; padding: 8px 10px; border: 1px solid #dce4fb; border-radius: 10px; background: #fff; color: #33415f; text-align: left; }
+.tomorrow-list button span { color: #687898; font-size: 12px; }
+.tomorrow-list button strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.event-pin { display: inline; margin-left: 4px; font-size: 10px !important; }
