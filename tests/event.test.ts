@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS, EVENT_COLOR_PALETTE, isValidEvent } from "../src/domain/event";
+import { DEFAULT_SETTINGS, EVENT_COLOR_PALETTE, getNextEventColor, isValidEvent } from "../src/domain/event";
 
 const validEvent = {
   id: "event-1",
@@ -34,5 +34,13 @@ describe("calendar foundation", () => {
   it("rejects empty titles and non-positive durations", () => {
     expect(isValidEvent({ ...validEvent, title: " " })).toBe(false);
     expect(isValidEvent({ ...validEvent, endAt: validEvent.startAt })).toBe(false);
+  });
+
+  it("assigns a distinct light color even after the palette is exhausted", () => {
+    const events = EVENT_COLOR_PALETTE.map((color, index) => ({ ...validEvent, id: `event-${index}`, color: color.value }));
+    const nextColor = getNextEventColor(events);
+    expect(events.some((event) => event.color?.toLowerCase() === nextColor.toLowerCase())).toBe(false);
+    const channels = nextColor.slice(1).match(/../g)?.map((channel) => Number.parseInt(channel, 16)) ?? [];
+    expect(Math.min(...channels)).toBeGreaterThanOrEqual(160);
   });
 });

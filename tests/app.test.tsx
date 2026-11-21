@@ -66,7 +66,7 @@ describe("calendar viewing and editing modes", () => {
     }];
     storageState.saved = [];
     root = createRoot(container);
-    await act(async () => { root?.render(<App />); });
+    await act(async () => { root?.unmount(); root = createRoot(container); root.render(<App />); });
   });
 
   afterEach(async () => {
@@ -204,5 +204,37 @@ describe("calendar viewing and editing modes", () => {
     const saved = storageState.saved.find((item) => item.id === "mode-test-event");
     expect(saved).toBeDefined();
     expect(Date.parse(saved!.endAt)).toBeLessThanOrEqual(Date.parse(storageState.events.find((item) => item.id === "blocked-event")!.startAt));
+  });
+
+  it("shows tomorrow's schedule after today's events are finished", async () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    storageState.events = storageState.events.map((event) => event.id !== "tomorrow-event"
+      ? { ...event, startAt: new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 10).toISOString(), endAt: new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 10, 30).toISOString() }
+      : event);
+    await act(async () => { root?.unmount(); root = createRoot(container); root.render(<App />); });
+    expect(container.querySelector(".tomorrow-card")?.textContent).toContain("本日の予定完了、お疲れさまでした");
+    expect(container.querySelector(".tomorrow-card")?.textContent).toContain("翌日の予定");
+  });
+
+  it("opens gap-created appointments with the title 移動", async () => {
+    await click(container.querySelector(".mode-toggle"));
+    const timeline = container.querySelector<HTMLElement>(".timeline");
+    if (!timeline) throw new Error("Expected timeline to be rendered");
+    timeline.getBoundingClientRect = () => ({ top: 0, bottom: 1800, left: 0, right: 400, width: 400, height: 1800, x: 0, y: 0, toJSON: () => ({}) });
+    const tap = new MouseEvent("click", { bubbles: true, cancelable: true });
+    Object.defineProperty(tap, "clientY", { value: 9 * 72 });
+    await act(async () => { timeline.dispatchEvent(tap); });
+    expect(container.querySelector<HTMLInputElement>('input[name="title"]')?.value).toBe("移動");
+  });
+
+  it("navigates to a pinned appointment with the pin button", async () => {
+    storageState.events = storageState.events.map((event) => event.id === "tomorrow-event" ? { ...event, pinned: true } : event);
+    await act(async () => { root?.unmount(); root = createRoot(container); root.render(<App />); });
+    await click(container.querySelector('[aria-label="ピン留め予定へ"]'));
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowKey = [tomorrow.getFullYear(), String(tomorrow.getMonth() + 1).padStart(2, "0"), String(tomorrow.getDate()).padStart(2, "0")].join("-");
+    expect(container.querySelector<HTMLInputElement>('[aria-label="表示日"]')?.value).toBe(tomorrowKey);
   });
 });
