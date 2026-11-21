@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent } from "../src/domain/event";
-import { dayEvents, defaultEventRange, getNextEvent, layoutOverlaps, nearestQuarterHourMinute, nextScheduledDay, resolveDragOverlaps, snapMinutes } from "../src/domain/time";
+import { dayEvents, defaultEventRange, getNextEvent, layoutOverlaps, nearestQuarterHourMinute, nextScheduledDay, resolveDragOverlaps, snapMinutes, stepEventTimeOnQuarterGrid } from "../src/domain/time";
 
 function event(id: string, start: string, end: string): CalendarEvent {
   const [startHour, startMinute] = start.split(":").map(Number);
@@ -46,6 +46,26 @@ describe("day timeline calculations", () => {
     expect(snapMinutes(17, 72, 15)).toBe(15);
     expect(snapMinutes(19, 72, 15)).toBe(15);
     expect(snapMinutes(28, 72, 15)).toBe(30);
+  });
+
+  it("rounds button adjustments to directional 15-minute boundaries", () => {
+    const moving = event("moving", "11:14", "11:44");
+    const movedForward = stepEventTimeOnQuarterGrid(moving, "move", 1);
+    expect(new Date(movedForward.startAt).getHours()).toBe(11);
+    expect(new Date(movedForward.startAt).getMinutes()).toBe(15);
+    const movedAgain = stepEventTimeOnQuarterGrid(movedForward, "move", 1);
+    expect(new Date(movedAgain.startAt).getMinutes()).toBe(30);
+    const movedBackward = stepEventTimeOnQuarterGrid(moving, "move", -1);
+    expect(new Date(movedBackward.startAt).getMinutes()).toBe(0);
+
+    const duration = event("duration", "10:45", "11:14");
+    const extended = stepEventTimeOnQuarterGrid(duration, "resize-end", 1);
+    expect(new Date(extended.endAt).getMinutes()).toBe(15);
+    const extendedAgain = stepEventTimeOnQuarterGrid(extended, "resize-end", 1);
+    expect(new Date(extendedAgain.endAt).getMinutes()).toBe(30);
+    const shortened = stepEventTimeOnQuarterGrid(duration, "resize-end", -1);
+    expect(new Date(shortened.endAt).getHours()).toBe(11);
+    expect(new Date(shortened.endAt).getMinutes()).toBe(0);
   });
 
   it("snaps a dragged event to the nearest free 15-minute boundary instead of overlapping", () => {

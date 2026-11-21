@@ -5,7 +5,7 @@ import type { CalendarEvent, CalendarSettings } from "./domain/event";
 import { makeBackup, parseBackup } from "./domain/backup";
 import type { CalendarBackup } from "./domain/backup";
 import { createICalendar } from "./domain/ical";
-import { changeEventTime, dayEvents, dateFromKey, dayKey, EVENT_TIME_INCREMENT_MINUTES, getNextEvent, layoutOverlaps, localDateTime, nearestQuarterHourMinute, defaultEventRange, hasPointerScrollIntent, nextAvailableEventRange, pointerScrollDelta, resolveDragOverlaps, snapMinutes } from "./domain/time";
+import { changeEventTime, dayEvents, dateFromKey, dayKey, EVENT_TIME_INCREMENT_MINUTES, getNextEvent, layoutOverlaps, localDateTime, nearestQuarterHourMinute, defaultEventRange, hasPointerScrollIntent, nextAvailableEventRange, pointerScrollDelta, resolveDragOverlaps, snapMinutes, stepEventTimeOnQuarterGrid } from "./domain/time";
 import type { DragMode } from "./domain/time";
 import { deleteEvent, getSettings, listEvents, restoreData, saveEvent, saveSettings } from "./storage/database";
 
@@ -308,7 +308,7 @@ export function App() {
     const selected = events.find((event) => event.id === selectedEventId);
     if (!selected) return;
     const changeMode = adjustment === "move" ? "move" : "resize-end";
-    const after = { ...changeEventTime(selected, changeMode, direction * EVENT_TIME_INCREMENT_MINUTES, EVENT_TIME_INCREMENT_MINUTES), updatedAt: new Date().toISOString() };
+    const after = { ...stepEventTimeOnQuarterGrid(selected, changeMode, direction), updatedAt: new Date().toISOString() };
     if (after.startAt === selected.startAt && after.endAt === selected.endAt) return;
     await saveEvent(after);
     setEvents((items) => items.map((event) => event.id === after.id ? after : event));
