@@ -106,7 +106,7 @@ export function App() {
   }
 
   function startPointer(e: ReactPointerEvent<HTMLElement>, event: CalendarEvent, mode: DragMode) {
-    e.preventDefault();
+    // Keep the native click generated after a short touch so tap selection and double-tap edit work.
     e.stopPropagation();
     const timeline = timelineRef.current;
     const seed: DragSeed = { event, mode, clientY: e.clientY, scrollTop: timeline?.scrollTop ?? 0, pointerId: e.pointerId, capture: e.currentTarget };
