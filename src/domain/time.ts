@@ -170,7 +170,7 @@ export function layoutOverlaps(events: CalendarEvent[]): PositionedEvent[] {
   const sorted = [...events].sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt) || Date.parse(a.endAt) - Date.parse(b.endAt));
   const result: PositionedEvent[] = [];
   let group: PositionedEvent[] = [];
-  let active: PositionedEvent[] = [];
+  let active: Array<{ positioned: PositionedEvent; layoutEnd: number }> = [];
   let groupEnd = -Infinity;
 
   const finishGroup = () => {
@@ -186,14 +186,15 @@ export function layoutOverlaps(events: CalendarEvent[]): PositionedEvent[] {
     const start = Date.parse(event.startAt);
     const end = Date.parse(event.endAt);
     if (group.length && start >= groupEnd) finishGroup();
-    active = active.filter((item) => Date.parse(item.event.endAt) > start);
-    const used = new Set(active.map((item) => item.column));
+    active = active.filter((item) => item.layoutEnd > start);
+    const used = new Set(active.map((item) => item.positioned.column));
     let column = 0;
     while (used.has(column)) column += 1;
     const placed = { event, column, columns: 1 };
     group.push(placed);
-    active.push(placed);
-    groupEnd = Math.max(groupEnd, end);
+    const layoutEnd = end > start ? end : start + 37 * 60_000;
+    active.push({ positioned: placed, layoutEnd });
+    groupEnd = Math.max(groupEnd, layoutEnd);
   }
   if (group.length) finishGroup();
   return result;

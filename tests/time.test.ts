@@ -86,6 +86,12 @@ describe("day timeline calculations", () => {
     expect(layout.map((item) => item.columns)).toEqual([3, 3, 3]);
   });
 
+  it("separates zero-duration events with identical start and end times", () => {
+    const layout = layoutOverlaps([event("zero-a", "09:00", "09:00"), event("zero-b", "09:00", "09:00")]);
+    expect(layout.map((item) => item.column)).toEqual([0, 1]);
+    expect(layout.map((item) => item.columns)).toEqual([2, 2]);
+  });
+
   it("selects the active event first, otherwise the nearest upcoming event", () => {
     const events = [event("later", "11:00", "12:00"), event("active", "09:00", "10:30")];
     expect(getNextEvent(events, new Date(2026, 10, 21, 9, 15))?.id).toBe("active");

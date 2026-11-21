@@ -13,8 +13,9 @@ button { touch-action: manipulation; }
 .mode-toggle { min-width: 58px; min-height: 44px; padding: 0 12px; border: 1px solid #dfe5f0; border-radius: 12px; background: #f4f6fb; color: #4b5b77; font-size: 13px; font-weight: 700; cursor: pointer; }
 .mode-toggle.is-editing { border-color: #4969df; background: #4969df; color: #fff; }
 .date-controls { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 5px; }
-.scheduled-day-row { display: flex; justify-content: center; margin-top: 4px; }
-.scheduled-day-button { min-height: 38px; padding: 0 12px; border: 1px solid #dfe5f0; border-radius: 11px; background: #f7f8fc; color: #53668e; font-size: 12px; font-weight: 650; }
+.scheduled-day-row { display: flex; justify-content: center; gap: 8px; margin-top: 4px; }
+.scheduled-day-button { flex: 1; max-width: 170px; min-height: 42px; padding: 0 12px; border: 1px solid #dfe5f0; border-radius: 11px; background: #f7f8fc; color: #53668e; font-size: 12px; font-weight: 650; touch-action: manipulation; }
+.scheduled-day-button:disabled { opacity: .45; }
 .date-label { min-width: 190px; text-align: center; position: relative; font-weight: 700; font-size: 16px; }
 .date-label input { position: absolute; inset: 0; width: 100%; opacity: 0; }
 .today-button { min-height: 40px; padding: 0 13px; border: 1px solid #dfe5f0; background: #fff; color: #52617d; border-radius: 12px; font-size: 13px; }
@@ -51,7 +52,8 @@ button { touch-action: manipulation; }
 .empty-day { position: absolute; top: 38px; left: 76px; right: 24px; margin: 0; color: #9aa3b5; font-size: 12px; }
 .add-button, .now-button { position: absolute; z-index: 3; display: grid; place-items: center; border: 0; box-shadow: 0 6px 18px #31497e2b; cursor: pointer; }
 .add-button { right: 20px; bottom: calc(20px + env(safe-area-inset-bottom)); width: 58px; height: 58px; border-radius: 20px; background: #4969df; color: white; font-size: 32px; }
-.now-button { right: 28px; bottom: calc(91px + env(safe-area-inset-bottom)); width: 42px; height: 42px; border-radius: 15px; background: white; color: #4a5d88; font-size: 12px; font-weight: 700; }
+.now-button { right: 14px; bottom: calc(146px + env(safe-area-inset-bottom)); min-width: 104px; height: 44px; padding: 0 12px; border-radius: 15px; background: white; color: #4a5d88; font-size: 12px; font-weight: 700; }
+.floating-mode-toggle { position: absolute; z-index: 3; right: 20px; bottom: calc(82px + env(safe-area-inset-bottom)); width: 92px; min-height: 44px; box-shadow: 0 6px 18px #31497e2b; }
 .undo-bar { position: absolute; z-index: 5; left: 12px; bottom: calc(18px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 9px; padding: 7px 9px 7px 13px; border-radius: 14px; background: #25344f; color: #fff; box-shadow: 0 8px 24px #13234438; font-size: 12px; }
 .undo-bar button { min-height: 40px; padding: 0 9px; border: 0; border-radius: 10px; background: #ffffff1e; color: #fff; font-weight: 700; }
 .undo-bar button:disabled { opacity: .45; }
