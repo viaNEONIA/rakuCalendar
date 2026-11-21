@@ -66,7 +66,7 @@ describe("calendar viewing and editing modes", () => {
     }];
     storageState.saved = [];
     root = createRoot(container);
-    await act(async () => { root?.unmount(); root = createRoot(container); root.render(<App />); });
+    await act(async () => { root?.render(<App />); });
   });
 
   afterEach(async () => {

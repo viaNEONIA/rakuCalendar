@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS, EVENT_COLOR_PALETTE, getNextEventColor, isValidEvent } from "../src/domain/event";
+import { DEFAULT_EVENT_COLOR, DEFAULT_SETTINGS, EVENT_COLOR_PALETTE, getNextEventColor, isValidEvent } from "../src/domain/event";
 
 const validEvent = {
   id: "event-1",
@@ -37,6 +37,7 @@ describe("calendar foundation", () => {
   });
 
   it("assigns a distinct light color even after the palette is exhausted", () => {
+    expect(getNextEventColor([{ ...validEvent, id: "legacy-no-color" }])).not.toBe(DEFAULT_EVENT_COLOR);
     const events = EVENT_COLOR_PALETTE.map((color, index) => ({ ...validEvent, id: `event-${index}`, color: color.value }));
     const nextColor = getNextEventColor(events);
     expect(events.some((event) => event.color?.toLowerCase() === nextColor.toLowerCase())).toBe(false);

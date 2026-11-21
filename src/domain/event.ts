@@ -49,7 +49,7 @@ function generatedPastel(index: number): string {
 }
 
 export function getNextEventColor(events: CalendarEvent[], excludeId?: string): string {
-  const used = new Set(events.filter((event) => event.id !== excludeId).map((event) => event.color?.toLowerCase()).filter(Boolean));
+  const used = new Set(events.filter((event) => event.id !== excludeId).map((event) => (event.color ?? DEFAULT_EVENT_COLOR).toLowerCase()));
   const available = EVENT_COLOR_PALETTE.find((color) => !used.has(color.value.toLowerCase()));
   if (available) return available.value;
   for (let index = 0; ; index += 1) {
@@ -59,7 +59,7 @@ export function getNextEventColor(events: CalendarEvent[], excludeId?: string): 
 }
 
 export function getEventColorOptions(events: CalendarEvent[], editing: CalendarEvent) {
-  const used = new Set(events.filter((event) => event.id !== editing.id).map((event) => event.color?.toLowerCase()).filter(Boolean));
+  const used = new Set(events.filter((event) => event.id !== editing.id).map((event) => (event.color ?? DEFAULT_EVENT_COLOR).toLowerCase()));
   const options: Array<{ name: string; value: string }> = EVENT_COLOR_PALETTE.filter((color) => !used.has(color.value.toLowerCase()));
   let generatedIndex = 0;
   while (options.length < 8) {
