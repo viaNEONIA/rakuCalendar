@@ -149,6 +149,20 @@ describe("calendar viewing and editing modes", () => {
     expect(Date.parse(end.toISOString())).toBeGreaterThan(Date.parse(blocked.startAt));
   });
 
+  it("extends and shortens a selected event by exactly 15 minutes", async () => {
+    await click(container.querySelector(".mode-toggle"));
+    await click(container.querySelector(".event-card"));
+    const original = storageState.events.find((item) => item.id === "mode-test-event")!;
+    await click(container.querySelector('[aria-label="15分延長"]'));
+    const extended = storageState.saved.at(-1)!;
+    expect(extended.startAt).toBe(original.startAt);
+    expect(Date.parse(extended.endAt) - Date.parse(original.endAt)).toBe(15 * 60_000);
+    await click(container.querySelector('[aria-label="15分短縮"]'));
+    const shortened = storageState.saved.at(-1)!;
+    expect(shortened.startAt).toBe(original.startAt);
+    expect(shortened.endAt).toBe(original.endAt);
+  });
+
   it("jumps to the next day that has a scheduled event", async () => {
     const today = new Date();
     const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);

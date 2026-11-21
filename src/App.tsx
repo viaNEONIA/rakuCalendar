@@ -271,11 +271,12 @@ export function App() {
     void persist({ ...editing, title: String(form.get("title")).trim(), destination: String(form.get("destination")).trim(), startAt: start.toISOString(), endAt: end.toISOString(), memo: String(form.get("memo")).trim(), color: String(form.get("color")), updatedAt: new Date().toISOString() });
   }
 
-  async function adjustSelectedTime(direction: -1 | 1) {
+  async function adjustSelectedTime(direction: -1 | 1, adjustment: "move" | "duration" = "move") {
     const selected = events.find((event) => event.id === selectedEventId);
     if (!selected) return;
-    const after = { ...changeEventTime(selected, "move", direction * EVENT_TIME_INCREMENT_MINUTES, EVENT_TIME_INCREMENT_MINUTES), updatedAt: new Date().toISOString() };
-    if (after.startAt === selected.startAt) return;
+    const changeMode = adjustment === "move" ? "move" : "resize-end";
+    const after = { ...changeEventTime(selected, changeMode, direction * EVENT_TIME_INCREMENT_MINUTES, EVENT_TIME_INCREMENT_MINUTES), updatedAt: new Date().toISOString() };
+    if (after.startAt === selected.startAt && after.endAt === selected.endAt) return;
     await saveEvent(after);
     setEvents((items) => items.map((event) => event.id === after.id ? after : event));
     history.current = [...history.current.slice(0, historyIndex.current), { before: selected, after }];
@@ -380,7 +381,7 @@ export function App() {
       {isToday && settings.showCurrentTime && nowMinutes >= settings.displayStartHour * 60 && nowMinutes <= settings.displayEndHour * 60 && <div className="current-time" style={{ top: (nowMinutes - settings.displayStartHour * 60) * HOUR_HEIGHT / 60 }}><span>{formatTime(now.toISOString())}</span><i /></div>}
       {visibleEvents.length === 0 && <p className="empty-day">{mode === "edit" ? "空き時間をタップするか、右下の＋から予定を追加できます。" : "この日に予定はありません。予定を追加するには編集モードに切り替えてください。"}</p>}
     </main>
-    {mode === "edit" && selectedEventId && visibleEvents.some((event) => event.id === selectedEventId) && <div className="time-adjust-controls" aria-label="予定時刻の調整"><button aria-label="15分前へ" title="15分前へ" onClick={() => void adjustSelectedTime(-1)}>↑</button><button aria-label="15分後へ" title="15分後へ" onClick={() => void adjustSelectedTime(1)}>↓</button></div>}
+    {mode === "edit" && selectedEventId && visibleEvents.some((event) => event.id === selectedEventId) && <div className="time-adjust-controls" aria-label="予定時刻の調整"><div className="time-adjust-group"><span>時間帯移動</span><button aria-label="15分前へ" title="15分前へ" onClick={() => void adjustSelectedTime(-1, "move")}>↑</button><button aria-label="15分後へ" title="15分後へ" onClick={() => void adjustSelectedTime(1, "move")}>↓</button></div><div className="time-adjust-group"><span>予定時間</span><button aria-label="15分延長" title="15分延長" onClick={() => void adjustSelectedTime(1, "duration")}>＋</button><button aria-label="15分短縮" title="15分短縮" onClick={() => void adjustSelectedTime(-1, "duration")}>−</button></div></div>}
     <button className="now-button" aria-label="現在時刻へ" onClick={() => { if (timelineRef.current) timelineRef.current.scrollTo({ top: Math.max(0, (nowMinutes - settings.displayStartHour * 60) * HOUR_HEIGHT / 60 - 36), behavior: "smooth" }); }}>今</button>
     {mode === "edit" && <button className="add-button" aria-label="予定を追加" onClick={() => setEditing(makeInitialEvent(dateFromKey(selectedDay), new Date(), events))}>＋</button>}
     {undoVisible && <div className="undo-bar" role="status"><span>時間を変更しました</span><button onClick={() => void travelHistory("undo")} disabled={historyIndex.current <= 0}>元に戻す</button><button onClick={() => void travelHistory("redo")} disabled={historyIndex.current >= history.current.length}>やり直す</button></div>}
