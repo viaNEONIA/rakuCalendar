@@ -165,16 +165,16 @@ describe("calendar viewing and editing modes", () => {
     expect(shortened.endAt).toBe(original.endAt);
   });
 
-  it("navigates to previous and next appointments across dates", async () => {
+  it("navigates to the previous or next day that has appointments", async () => {
     const today = new Date();
     const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-    await click(container.querySelector('[aria-label="翌日"]'));
-    await click(container.querySelector('[aria-label="前の予定"]'));
-    const todayKey = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, "0"), String(today.getDate()).padStart(2, "0")].join("-");
-    expect(container.querySelector<HTMLInputElement>('[aria-label="表示日"]')?.value).toBe(todayKey);
     await click(container.querySelector('[aria-label="次の予定"]'));
     const tomorrowKey = [tomorrow.getFullYear(), String(tomorrow.getMonth() + 1).padStart(2, "0"), String(tomorrow.getDate()).padStart(2, "0")].join("-");
     expect(container.querySelector<HTMLInputElement>('[aria-label="表示日"]')?.value).toBe(tomorrowKey);
+    await click(container.querySelector('[aria-label="前の予定"]'));
+    const todayKey = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, "0"), String(today.getDate()).padStart(2, "0")].join("-");
+    expect(container.querySelector<HTMLInputElement>('[aria-label="表示日"]')?.value).toBe(todayKey);
+    expect((container.querySelector('[aria-label="前の予定"]') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("allows deliberate overlap when times are entered in the edit form", async () => {

@@ -5,7 +5,7 @@ import type { CalendarEvent, CalendarSettings } from "./domain/event";
 import { makeBackup, parseBackup } from "./domain/backup";
 import type { CalendarBackup } from "./domain/backup";
 import { createICalendar } from "./domain/ical";
-import { changeEventTime, dayEvents, dateFromKey, dayKey, EVENT_TIME_INCREMENT_MINUTES, getNextEvent, layoutOverlaps, localDateTime, nearestQuarterHourMinute, defaultEventRange, hasPointerScrollIntent, nextAvailableEventRange, pointerScrollDelta, resolveDragOverlaps, snapMinutes, stepEventTimeOnQuarterGrid } from "./domain/time";
+import { changeEventTime, dayEvents, dateFromKey, dayKey, EVENT_TIME_INCREMENT_MINUTES, getNextEvent, layoutOverlaps, localDateTime, nearestQuarterHourMinute, defaultEventRange, hasPointerScrollIntent, nextAvailableEventRange, nextScheduledDay, previousScheduledDay, pointerScrollDelta, resolveDragOverlaps, snapMinutes, stepEventTimeOnQuarterGrid } from "./domain/time";
 import type { DragMode } from "./domain/time";
 import { deleteEvent, getSettings, listEvents, restoreData, saveEvent, saveSettings } from "./storage/database";
 
@@ -78,16 +78,8 @@ export function App() {
   const chronologicalEvents = useMemo(() => [...events].sort((left, right) => Date.parse(left.startAt) - Date.parse(right.startAt)), [events]);
   const pinnedEvents = useMemo(() => chronologicalEvents.filter((event) => event.pinned), [chronologicalEvents]);
   const isToday = selectedDay === dayKey(now);
-  const selectedDateStart = dateFromKey(selectedDay).getTime();
-  const navigationCursorIndex = navigationCursorId ? chronologicalEvents.findIndex((event) => event.id === navigationCursorId) : -1;
-  const nextNavigationAnchor = isToday ? now.getTime() : selectedDateStart - 1;
-  const previousNavigationAnchor = isToday ? now.getTime() : selectedDateStart;
-  const nextAppointment = navigationCursorIndex >= 0
-    ? chronologicalEvents[navigationCursorIndex + 1]
-    : chronologicalEvents.find((event) => Date.parse(event.startAt) > nextNavigationAnchor);
-  const previousAppointment = navigationCursorIndex >= 0
-    ? chronologicalEvents[navigationCursorIndex - 1]
-    : [...chronologicalEvents].reverse().find((event) => Date.parse(event.startAt) < previousNavigationAnchor);
+  const nextScheduledDayKey = nextScheduledDay(events, selectedDay);
+  const previousScheduledDayKey = previousScheduledDay(events, selectedDay);
 
   useEffect(() => {
     void Promise.all([listEvents(), getSettings()]).then(([savedEvents, savedSettings]) => { setEvents(savedEvents); setSettings(savedSettings); }).finally(() => setLoaded(true));
@@ -342,6 +334,20 @@ export function App() {
     setPendingScrollStart(event.startAt);
   }
 
+  function goToScheduledDay(dayKeyValue?: string) {
+    if (!dayKeyValue) return;
+    const targetDay = dateFromKey(dayKeyValue);
+    const event = dayEvents(events, targetDay)[0];
+    setNavigationCursorId(event?.id ?? null);
+    setSelectedDay(dayKeyValue);
+    if (event) {
+      const startOfTarget = targetDay.getTime();
+      setPendingScrollStart(new Date(Math.max(Date.parse(event.startAt), startOfTarget)).toISOString());
+    } else {
+      setPendingScrollStart(null);
+    }
+  }
+
   function showCurrentTime() {
     setNavigationCursorId(null);
     setSelectedDay(dayKey(now));
@@ -382,7 +388,7 @@ export function App() {
         <button className="icon-button" aria-label="翌日" onClick={() => changeDay(1)}>›</button>
         <button className="today-button pin-navigation-button" aria-label="ピン留め予定へ" title="ピン留め予定へ" disabled={pinnedEvents.length === 0} onClick={jumpToPinned}>📌</button>
       </div>
-      <div className="scheduled-day-row"><button className="scheduled-day-button" aria-label="前の予定" disabled={!previousAppointment} onClick={() => goToAppointment(previousAppointment)}>‹ 前の予定</button><button className="scheduled-day-button" aria-label="次の予定" disabled={!nextAppointment} onClick={() => goToAppointment(nextAppointment)}>次の予定 ›</button></div>
+      <div className="scheduled-day-row"><button className="scheduled-day-button" aria-label="前の予定" disabled={!previousScheduledDayKey} onClick={() => goToScheduledDay(previousScheduledDayKey)}>‹ 前の予定</button><button className="scheduled-day-button" aria-label="次の予定" disabled={!nextScheduledDayKey} onClick={() => goToScheduledDay(nextScheduledDayKey)}>次の予定 ›</button></div>
     </header>
 
     {settings.showNextEvent && (isToday && !nextEvent ? <section className="next-card tomorrow-card" aria-label="明日の予定">

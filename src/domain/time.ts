@@ -113,6 +113,26 @@ export function nextScheduledDay(events: CalendarEvent[], selectedDay: string): 
   return upcoming === undefined ? undefined : dayKey(new Date(upcoming));
 }
 
+export function previousScheduledDay(events: CalendarEvent[], selectedDay: string): string | undefined {
+  const selectedStart = dateFromKey(selectedDay).getTime();
+  const previousDayEnd = selectedStart;
+  let latestDay: string | undefined;
+  let latestStart = -Infinity;
+  for (const event of events) {
+    const start = Date.parse(event.startAt);
+    const end = Date.parse(event.endAt);
+    const lastOccupied = Math.min(end - 1, previousDayEnd - 1);
+    if (lastOccupied < start) continue;
+    const candidate = new Date(lastOccupied);
+    const candidateStart = new Date(candidate.getFullYear(), candidate.getMonth(), candidate.getDate()).getTime();
+    if (candidateStart > latestStart) {
+      latestStart = candidateStart;
+      latestDay = dayKey(candidate);
+    }
+  }
+  return latestDay;
+}
+
 export function snapMinutes(deltaPixels: number, pixelsPerHour: number, slotMinutes: number): number {
   return Math.round(deltaPixels / pixelsPerHour * 60 / slotMinutes) * slotMinutes;
 }
