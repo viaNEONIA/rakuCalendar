@@ -8,7 +8,7 @@ rakuCalendarは、スマートフォンでの操作に特化した、シンプ�
 
 ## 画面紹介
 
-| 1日のタイムライン | 表示モード |
+| 編集モード | 表示モード |
 | :---: | :---: |
 | <img src="docs/screenshots/timeline.png" width="290" alt="予定のタイムラインと操作ボタン"> | <img src="docs/screenshots/view-mode.png" width="290" alt="表示モードでの時間軸"> |
 | **予定の編集** | **設定・データ管理** |
