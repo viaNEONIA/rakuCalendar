@@ -16,7 +16,7 @@ export function makeBackup(events: CalendarEvent[], settings: CalendarSettings, 
 }
 
 export function parseBackup(text: string): CalendarBackup {
-  if (text.length > 20_000_000) throw new Error("バックアップファイルが大きすぎます。");
+  if (text.length > 100_000_000) throw new Error("バックアップファイルが大きすぎます（上限100MB）。");
   let parsed: unknown;
   try { parsed = JSON.parse(text); } catch { throw new Error("JSONを読み取れません。ファイル内容を確認してください。"); }
   if (!parsed || typeof parsed !== "object") throw new Error("バックアップ形式が正しくありません。");
@@ -40,5 +40,5 @@ export function parseBackup(text: string): CalendarBackup {
 }
 
 export function eventsEqual(a: CalendarEvent, b: CalendarEvent): boolean {
-  return a.id === b.id && a.title === b.title && a.destination === b.destination && a.startAt === b.startAt && a.endAt === b.endAt && a.memo === b.memo && a.color === b.color && Boolean(a.pinned) === Boolean(b.pinned);
+  return a.id === b.id && a.title === b.title && a.destination === b.destination && a.startAt === b.startAt && a.endAt === b.endAt && a.memo === b.memo && a.color === b.color && Boolean(a.pinned) === Boolean(b.pinned) && a.imageDataUrl === b.imageDataUrl;
 }

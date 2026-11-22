@@ -93,6 +93,7 @@ describe("calendar viewing and editing modes", () => {
     await click(container.querySelector(".mode-toggle"));
     expect(container.querySelector(".app-shell")?.classList.contains("is-edit-mode")).toBe(true);
     expect(container.querySelector(".mode-toggle")?.textContent).toBe("編集モード");
+    expect(container.querySelector(".event-duration")?.textContent).toContain("30分");
     expect(container.querySelector(".add-button")).not.toBeNull();
     expect(container.querySelectorAll(".resize-handle")).toHaveLength(0);
 
@@ -103,6 +104,8 @@ describe("calendar viewing and editing modes", () => {
     await click(container.querySelector(".event-card"));
     expect(container.querySelector('[role="dialog"] h2')?.textContent).toBe("予定を編集");
     expect(container.querySelectorAll(".color-swatch")).toHaveLength(8);
+    expect(container.querySelector<HTMLInputElement>('input[type="file"][accept="image/png,image/jpeg,image/webp"]')?.multiple).toBe(false);
+    expect(container.querySelector(".event-image-preview")).toBeNull();
     await click(container.querySelector('[aria-label="閉じる"]'));
 
     await click(container.querySelector(".add-button"));
