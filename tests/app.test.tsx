@@ -12,7 +12,19 @@ vi.mock("../src/storage/database", () => ({
   saveSettings: vi.fn(),
   saveEvent: async (event: CalendarEvent) => { storageState.saved.push(event); },
   deleteEvent: vi.fn(),
-  restoreData: vi.fn()
+  restoreData: async (incoming: CalendarEvent[], _settings: unknown, mode: "merge" | "replace") => {
+    if (mode === "replace") { storageState.events = [...incoming]; return { added: incoming.length, updated: 0, skipped: 0 }; }
+    const ids = new Set(storageState.events.map((event) => event.id));
+    let added = 0;
+    let skipped = 0;
+    for (const event of incoming) {
+      if (ids.has(event.id)) { skipped += 1; continue; }
+      ids.add(event.id);
+      storageState.events.push(event);
+      added += 1;
+    }
+    return { added, updated: 0, skipped };
+  }
 }));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -245,6 +257,31 @@ describe("calendar viewing and editing modes", () => {
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowKey = [tomorrow.getFullYear(), String(tomorrow.getMonth() + 1).padStart(2, "0"), String(tomorrow.getDate()).padStart(2, "0")].join("-");
     expect(container.querySelector<HTMLInputElement>('[aria-label="表示日"]')?.value).toBe(tomorrowKey);
+  });
+
+  it("previews an ICS file and registers its events without replacing existing appointments", async () => {
+    await click(container.querySelector('[aria-label="設定"]'));
+    const input = container.querySelector<HTMLInputElement>('input[accept=".ics,text/calendar"]');
+    if (!input) throw new Error("ICS file input was not rendered");
+    const content = [
+      "BEGIN:VCALENDAR",
+      "BEGIN:VEVENT",
+      "UID:ui-import@example.test",
+      "DTSTART:20261125T090000Z",
+      "DTEND:20261125T093000Z",
+      "SUMMARY:取込テスト予定",
+      "END:VEVENT",
+      "END:VCALENDAR"
+    ].join("\r\n");
+    const file = { name: "schedule.ics", size: content.length, text: async () => content } as File;
+    Object.defineProperty(input, "files", { configurable: true, value: [file] });
+    await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(container.querySelector(".ical-preview")?.textContent).toContain("登録可能: 1件");
+    expect(container.querySelector(".ical-preview")?.textContent).toContain("取込テスト予定");
+    await click(Array.from(container.querySelectorAll(".ical-preview button")).find((button) => button.textContent === "予定を追加登録") ?? null);
+    expect(storageState.events.some((event) => event.title === "取込テスト予定")).toBe(true);
+    expect(container.querySelector(".ical-preview")).toBeNull();
+    expect(container.textContent).toContain("追加 1件");
   });
 
   it("toggles pin state from the event details and persists it", async () => {
