@@ -116,6 +116,7 @@ button { touch-action: manipulation; }
 .time-adjust-controls button:nth-child(3) { grid-area: 2 / 3; }
 .time-adjust-controls button:nth-child(4) { grid-area: 3 / 2; }
 .undo-bar { bottom: calc(134px + env(safe-area-inset-bottom)); left: 12px; max-width: calc(100% - 24px); flex-wrap: wrap; }
+.undo-bar.has-time-controls { bottom: calc(206px + env(safe-area-inset-bottom)); }
 .time-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .time-field { min-width: 0; margin: 0; padding: 0; border: 0; }
 .time-field legend { margin-bottom: 6px; color: #52617a; font-size: 12px; font-weight: 650; }
