@@ -109,13 +109,14 @@ button { touch-action: manipulation; }
 @media (min-width: 600px) { .dialog-backdrop { align-items: center; padding: 20px; } .event-dialog, .settings-panel { border-radius: 22px; } }
 
 .event-shell.is-selected .event-card { outline: 3px solid #4969df; outline-offset: 2px; z-index: 3; }
-.time-adjust-controls { position: absolute; z-index: 5; left: 20px; bottom: calc(204px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(3, 52px); gap: 4px; padding: 7px; border-radius: 19px; background: #ffffffed; box-shadow: 0 6px 18px #31497e2b; }
+.time-adjust-controls { position: absolute; z-index: 5; left: 20px; bottom: calc(20px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(3, 52px); gap: 4px; padding: 7px; border-radius: 19px; background: #ffffffed; box-shadow: 0 6px 18px #31497e2b; }
 .time-adjust-controls button { width: 52px; height: 52px; border: 0; border-radius: 15px; background: #4969df; color: white; box-shadow: 0 3px 10px #31497e28; font-size: 26px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
 .time-adjust-controls button:nth-child(1) { grid-area: 1 / 2; }
 .time-adjust-controls button:nth-child(2) { grid-area: 2 / 1; }
 .time-adjust-controls button:nth-child(3) { grid-area: 2 / 3; }
 .time-adjust-controls button:nth-child(4) { grid-area: 3 / 2; }
 .undo-bar { bottom: calc(134px + env(safe-area-inset-bottom)); left: 12px; max-width: calc(100% - 24px); flex-wrap: wrap; }
+.undo-bar.has-time-controls { bottom: calc(208px + env(safe-area-inset-bottom)); }
 .time-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .time-field { min-width: 0; margin: 0; padding: 0; border: 0; }
 .time-field legend { margin-bottom: 6px; color: #52617a; font-size: 12px; font-weight: 650; }
