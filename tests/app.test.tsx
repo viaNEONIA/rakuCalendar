@@ -162,7 +162,8 @@ describe("calendar viewing and editing modes", () => {
     const extended = storageState.saved.at(-1)!;
     expect(extended.startAt).toBe(original.startAt);
     expect(Date.parse(extended.endAt) - Date.parse(original.endAt)).toBe(15 * 60_000);
-    expect(container.querySelector('.undo-bar')?.classList.contains('has-time-controls')).toBe(true);
+    expect(container.querySelector('.undo-bar')).not.toBeNull();
+    expect(container.querySelectorAll('.time-adjust-controls button')).toHaveLength(4);
     await click(container.querySelector('[aria-label="15分短縮"]'));
     const shortened = storageState.saved.at(-1)!;
     expect(shortened.startAt).toBe(original.startAt);
