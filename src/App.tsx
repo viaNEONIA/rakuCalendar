@@ -38,6 +38,15 @@ function formatTime(iso: string) {
   return new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 }
 
+function formatDuration(startAt: string, endAt: string) {
+  const minutes = Math.max(0, Math.round((Date.parse(endAt) - Date.parse(startAt)) / 60_000));
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  if (hours && remainder) return `${hours}時間${remainder}分`;
+  if (hours) return `${hours}時間`;
+  return `${minutes}分`;
+}
+
 export function App() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [selectedDay, setSelectedDay] = useState(() => dayKey(new Date()));
@@ -437,8 +446,8 @@ export function App() {
           const { visibleStart, visibleEnd, ...shellStyle } = currentGeometry;
           return <div key={event.id} className={`event-shell${isDragging ? " is-dragging" : ""}${selectedEventId === event.id ? " is-selected" : ""}`} style={{ ...shellStyle, "--event-color": shownEvent.color || DEFAULT_EVENT_COLOR } as CSSProperties} onPointerMove={mode === "edit" ? movePointer : undefined} onPointerUp={mode === "edit" ? (e) => void finishPointer(e) : undefined} onPointerCancel={mode === "edit" ? () => { if (dragSeed.current?.timer) window.clearTimeout(dragSeed.current.timer); dragSeed.current = null; dragRef.current = null; suppressClick.current = false; setDragPreview(null); setSelectedEventId(null); lastTap.current = null; } : undefined}>
             {isDragging && <div className="event-ghost" style={{ top: old.top - currentGeometry.top, height: old.height }} />}
-            <button className="event-card" onPointerDown={mode === "edit" ? (e) => startPointer(e, event, "move") : undefined} onClick={() => onEventTap(event)} aria-label={`${event.title} ${formatTime(visibleStart.toISOString())}から${formatTime(visibleEnd.toISOString())}`}>
-              <strong>{shownEvent.title}{shownEvent.pinned ? <span className="event-pin" aria-label="ピン留め">📌</span> : null}</strong><span>{formatTime(visibleStart.toISOString())}–{formatTime(visibleEnd.toISOString())}</span>{shownEvent.destination && <small>{shownEvent.destination}</small>}
+            <button className="event-card" onPointerDown={mode === "edit" ? (e) => startPointer(e, event, "move") : undefined} onClick={() => onEventTap(event)} aria-label={`${event.title} ${formatTime(visibleStart.toISOString())}から${formatTime(visibleEnd.toISOString())}${mode === "view" ? `、${formatDuration(shownEvent.startAt, shownEvent.endAt)}` : ""}`}>
+              <strong>{shownEvent.title}{shownEvent.pinned ? <span className="event-pin" aria-label="ピン留め">📌</span> : null}</strong><span>{formatTime(visibleStart.toISOString())}–{formatTime(visibleEnd.toISOString())}{mode === "view" && <small className="event-duration"> · {formatDuration(shownEvent.startAt, shownEvent.endAt)}</small>}</span>{shownEvent.destination && <small>{shownEvent.destination}</small>}
             </button>
           </div>;
         })}
@@ -446,8 +455,8 @@ export function App() {
       {isToday && settings.showCurrentTime && nowMinutes >= settings.displayStartHour * 60 && nowMinutes <= settings.displayEndHour * 60 && <div className="current-time" style={{ top: (nowMinutes - settings.displayStartHour * 60) * HOUR_HEIGHT / 60 }}><span>{formatTime(now.toISOString())}</span><i /></div>}
       {visibleEvents.length === 0 && <p className="empty-day">{mode === "edit" ? "空き時間をタップするか、右下の＋から予定を追加できます。" : "この日に予定はありません。予定を追加するには編集モードに切り替えてください。"}</p>}
     </main>
-    {mode === "edit" && selectedEventId && visibleEvents.some((event) => event.id === selectedEventId) && <div className="time-adjust-controls" aria-label="予定時刻の調整"><div className="time-adjust-group"><span>時間帯移動</span><button aria-label="15分前へ" title="15分前へ" onClick={() => void adjustSelectedTime(-1, "move")}>↑</button><button aria-label="15分後へ" title="15分後へ" onClick={() => void adjustSelectedTime(1, "move")}>↓</button></div><div className="time-adjust-group"><span>予定時間</span><button aria-label="15分延長" title="15分延長" onClick={() => void adjustSelectedTime(1, "duration")}>＋</button><button aria-label="15分短縮" title="15分短縮" onClick={() => void adjustSelectedTime(-1, "duration")}>−</button></div></div>}
-    <button className="now-button" aria-label="今の時間帯を表示" onClick={showCurrentTime}>今の時間帯</button><button className={`mode-toggle floating-mode-toggle${mode === "edit" ? " is-editing" : ""}`} aria-pressed={mode === "edit"} aria-label={mode === "view" ? "編集モードへ切り替え" : "閲覧モードへ切り替え"} onClick={toggleMode}>{mode === "view" ? "閲覧" : "編集"}</button>
+    {mode === "edit" && selectedEventId && visibleEvents.some((event) => event.id === selectedEventId) && <div className="time-adjust-controls" aria-label="予定時刻の調整"><button aria-label="15分前へ" title="時間帯を15分前へ" onClick={() => void adjustSelectedTime(-1, "move")}>↑</button><button aria-label="15分短縮" title="予定時間を15分短縮" onClick={() => void adjustSelectedTime(-1, "duration")}>−</button><button aria-label="15分延長" title="予定時間を15分延長" onClick={() => void adjustSelectedTime(1, "duration")}>＋</button><button aria-label="15分後へ" title="時間帯を15分後へ" onClick={() => void adjustSelectedTime(1, "move")}>↓</button></div>}
+    <button className="now-button" aria-label="今の時間帯を表示" onClick={showCurrentTime}>Now</button><button className={`mode-toggle floating-mode-toggle${mode === "edit" ? " is-editing" : ""}`} aria-pressed={mode === "edit"} aria-label={mode === "view" ? "編集モードへ切り替え" : "表示モードへ切り替え"} onClick={toggleMode}>{mode === "view" ? "表示モード" : "編集モード"}</button>
     {mode === "edit" && <button className="add-button" aria-label="予定を追加" onClick={() => setEditing(makeInitialEvent(dateFromKey(selectedDay), new Date(), events))}>＋</button>}
     {undoVisible && <div className="undo-bar" role="status"><span>時間を変更しました</span><button onClick={() => void travelHistory("undo")} disabled={historyIndex.current <= 0}>元に戻す</button><button onClick={() => void travelHistory("redo")} disabled={historyIndex.current >= history.current.length}>やり直す</button></div>}
 
