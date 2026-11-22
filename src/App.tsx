@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FormEvent, PointerEvent as ReactPointerEvent } from "react";
 import { DEFAULT_EVENT_COLOR, DEFAULT_SETTINGS, getEventColorOptions, getNextEventColor } from "./domain/event";
+import { compressEventImage } from "./domain/eventImage";
 import type { CalendarEvent, CalendarSettings } from "./domain/event";
 import { makeBackup, parseBackup } from "./domain/backup";
 import type { CalendarBackup } from "./domain/backup";
@@ -65,6 +66,8 @@ export function App() {
   const [conflictPolicy, setConflictPolicy] = useState<"keep-local" | "use-backup">("keep-local");
   const [replaceConfirmed, setReplaceConfirmed] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState("");
+  const [imageProcessing, setImageProcessing] = useState(false);
+  const [imageError, setImageError] = useState("");
   const [dragPreview, setDragPreview] = useState<DragPreview | null>(null);
   const [undoVisible, setUndoVisible] = useState(false);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -287,9 +290,33 @@ export function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   });
 
+  async function attachEventImage(file: File | null) {
+    if (!file || !editing) return;
+    const targetId = editing.id;
+    setImageError("");
+    setImageProcessing(true);
+    try {
+      const imageDataUrl = await compressEventImage(file);
+      setEditing((current) => current?.id === targetId ? { ...current, imageDataUrl } : current);
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : "画像を読み込めませんでした。");
+    } finally {
+      setImageProcessing(false);
+    }
+  }
+
+  function removeEventImage() {
+    setEditing((current) => {
+      if (!current) return current;
+      const next = { ...current };
+      delete next.imageDataUrl;
+      return next;
+    });
+  }
+
   function submitForm(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!editing) return;
+    if (!editing || imageProcessing) return;
     const form = new FormData(e.currentTarget);
     const readDateTime = (prefix: "start" | "end") => {
       const date = dateFromKey(String(form.get(`${prefix}Date`)));
@@ -447,7 +474,7 @@ export function App() {
           return <div key={event.id} className={`event-shell${isDragging ? " is-dragging" : ""}${selectedEventId === event.id ? " is-selected" : ""}`} style={{ ...shellStyle, "--event-color": shownEvent.color || DEFAULT_EVENT_COLOR } as CSSProperties} onPointerMove={mode === "edit" ? movePointer : undefined} onPointerUp={mode === "edit" ? (e) => void finishPointer(e) : undefined} onPointerCancel={mode === "edit" ? () => { if (dragSeed.current?.timer) window.clearTimeout(dragSeed.current.timer); dragSeed.current = null; dragRef.current = null; suppressClick.current = false; setDragPreview(null); setSelectedEventId(null); lastTap.current = null; } : undefined}>
             {isDragging && <div className="event-ghost" style={{ top: old.top - currentGeometry.top, height: old.height }} />}
             <button className="event-card" onPointerDown={mode === "edit" ? (e) => startPointer(e, event, "move") : undefined} onClick={() => onEventTap(event)} aria-label={`${event.title} ${formatTime(visibleStart.toISOString())}から${formatTime(visibleEnd.toISOString())}${mode === "view" ? `、${formatDuration(shownEvent.startAt, shownEvent.endAt)}` : ""}`}>
-              <strong>{shownEvent.title}{shownEvent.pinned ? <span className="event-pin" aria-label="ピン留め">📌</span> : null}</strong><span>{formatTime(visibleStart.toISOString())}–{formatTime(visibleEnd.toISOString())}{mode === "view" && <small className="event-duration"> · {formatDuration(shownEvent.startAt, shownEvent.endAt)}</small>}</span>{shownEvent.destination && <small>{shownEvent.destination}</small>}
+              <strong>{shownEvent.title}{shownEvent.pinned ? <span className="event-pin" aria-label="ピン留め">📌</span> : null}</strong><span>{formatTime(visibleStart.toISOString())}–{formatTime(visibleEnd.toISOString())}<small className="event-duration"> · {formatDuration(shownEvent.startAt, shownEvent.endAt)}</small></span>{shownEvent.destination && <small>{shownEvent.destination}</small>}
             </button>
           </div>;
         })}
@@ -475,10 +502,10 @@ export function App() {
       <button className="secondary-button settings-done" onClick={() => { setSettingsOpen(false); setBackupPreview(null); }}>閉じる</button>
     </section></div>}
 
-    {viewingEvent && <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setViewingEvent(null); }}><section className="event-dialog" role="dialog" aria-modal="true" aria-labelledby="view-event-title"><div className="dialog-head"><h2 id="view-event-title">予定の詳細</h2><button className="icon-button" onClick={() => setViewingEvent(null)} aria-label="閉じる">×</button></div><div className="event-details"><strong>{viewingEvent.title}</strong><p>{new Date(viewingEvent.startAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" })}–{formatTime(viewingEvent.endAt)}</p>{viewingEvent.destination && <p>行先: {viewingEvent.destination}</p>}{viewingEvent.memo && <p className="event-detail-memo">{viewingEvent.memo}</p>}<button className="secondary-button settings-done" onClick={() => void togglePinned(viewingEvent)}>{viewingEvent.pinned ? "ピン留めを解除" : "📌 ピン留め"}</button><button className="secondary-button settings-done" onClick={() => setViewingEvent(null)}>閉じる</button></div></section></div>}
+    {viewingEvent && <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setViewingEvent(null); }}><section className="event-dialog" role="dialog" aria-modal="true" aria-labelledby="view-event-title"><div className="dialog-head"><h2 id="view-event-title">予定の詳細</h2><button className="icon-button" onClick={() => setViewingEvent(null)} aria-label="閉じる">×</button></div><div className="event-details"><strong>{viewingEvent.title}</strong><p>{new Date(viewingEvent.startAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" })}–{formatTime(viewingEvent.endAt)}</p>{viewingEvent.destination && <p>行先: {viewingEvent.destination}</p>}{viewingEvent.memo && <p className="event-detail-memo">{viewingEvent.memo}</p>}{viewingEvent.imageDataUrl && <img className="event-image-preview detail-event-image" src={viewingEvent.imageDataUrl} alt={`${viewingEvent.title}の添付画像`} />}<button className="secondary-button settings-done" onClick={() => void togglePinned(viewingEvent)}>{viewingEvent.pinned ? "ピン留めを解除" : "📌 ピン留め"}</button><button className="secondary-button settings-done" onClick={() => setViewingEvent(null)}>閉じる</button></div></section></div>}
 
     {editing && <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setEditing(null); }}><section className="event-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div className="dialog-head"><h2 id="dialog-title">{events.some((e) => e.id === editing.id) ? "予定を編集" : "予定を追加"}</h2><button className="icon-button" onClick={() => setEditing(null)} aria-label="閉じる">×</button></div>
-      <form onSubmit={submitForm} className="event-form"><label>予定内容<input name="title" required maxLength={120} autoFocus defaultValue={editing.title} /></label><label>行先（任意）<input name="destination" maxLength={120} defaultValue={editing.destination} /></label><div className="time-fields">{(["start", "end"] as const).map((prefix) => { const value = new Date(prefix === "start" ? editing.startAt : editing.endAt); const existing = events.some((item) => item.id === editing.id); const label = prefix === "start" ? "開始" : "終了"; return <fieldset className="time-field" key={prefix}><legend>{label}</legend><input aria-label={`${label}日付`} name={`${prefix}Date`} type="date" required defaultValue={`${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`} /><div className="numeric-time"><label>時<input aria-label={`${label}時`} name={`${prefix}Hour`} type="number" inputMode="numeric" min="0" max="23" required defaultValue={String(value.getHours()).padStart(2, "0")} /></label><span>:</span><label>分<input aria-label={`${label}分`} name={`${prefix}Minute`} type="number" inputMode="numeric" min="0" max="59" step={existing ? 1 : 15} required defaultValue={String(value.getMinutes()).padStart(2, "0")} /></label></div></fieldset>; })}</div><p className="time-entry-hint">ドラッグ操作では他の予定との重なりを避けます。重複させる場合は開始・終了時刻を直接指定してください。</p><fieldset className="color-palette"><legend>予定の色</legend><div className="color-swatch-grid">{colorOptions.map((color) => <label className="color-swatch" key={color.value}><input type="radio" name="color" value={color.value} defaultChecked={color.value.toLowerCase() === editingColor.toLowerCase()} /><span className="color-swatch-chip" style={{ "--swatch-color": color.value } as CSSProperties} /><small>{color.name}</small></label>)}</div></fieldset><label className="setting-check pin-event-option"><input type="checkbox" name="pinned" defaultChecked={Boolean(editing.pinned)} />📌 ピン留めする</label><label>メモ（任意）<textarea name="memo" rows={3} maxLength={2000} defaultValue={editing.memo} /></label><div className="form-actions">{events.some((e) => e.id === editing.id) && <button type="button" className="delete-button" onClick={() => void remove(editing.id)}>削除</button>}<button type="button" className="secondary-button" onClick={() => setEditing(null)}>キャンセル</button><button type="submit" className="save-button">保存</button></div></form>
+      <form onSubmit={submitForm} className="event-form"><label>予定内容<input name="title" required maxLength={120} autoFocus defaultValue={editing.title} /></label><label>行先（任意）<input name="destination" maxLength={120} defaultValue={editing.destination} /></label><div className="time-fields">{(["start", "end"] as const).map((prefix) => { const value = new Date(prefix === "start" ? editing.startAt : editing.endAt); const existing = events.some((item) => item.id === editing.id); const label = prefix === "start" ? "開始" : "終了"; return <fieldset className="time-field" key={prefix}><legend>{label}</legend><input aria-label={`${label}日付`} name={`${prefix}Date`} type="date" required defaultValue={`${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`} /><div className="numeric-time"><label>時<input aria-label={`${label}時`} name={`${prefix}Hour`} type="number" inputMode="numeric" min="0" max="23" required defaultValue={String(value.getHours()).padStart(2, "0")} /></label><span>:</span><label>分<input aria-label={`${label}分`} name={`${prefix}Minute`} type="number" inputMode="numeric" min="0" max="59" step={existing ? 1 : 15} required defaultValue={String(value.getMinutes()).padStart(2, "0")} /></label></div></fieldset>; })}</div><p className="time-entry-hint">ドラッグ操作では他の予定との重なりを避けます。重複させる場合は開始・終了時刻を直接指定してください。</p><fieldset className="color-palette"><legend>予定の色</legend><div className="color-swatch-grid">{colorOptions.map((color) => <label className="color-swatch" key={color.value}><input type="radio" name="color" value={color.value} defaultChecked={color.value.toLowerCase() === editingColor.toLowerCase()} /><span className="color-swatch-chip" style={{ "--swatch-color": color.value } as CSSProperties} /><small>{color.name}</small></label>)}</div></fieldset><label className="setting-check pin-event-option"><input type="checkbox" name="pinned" defaultChecked={Boolean(editing.pinned)} />📌 ピン留めする</label><div className="event-image-field"><span className="event-image-label">予定の画像（1枚）</span><label className="event-image-picker">{editing.imageDataUrl ? "画像を入れ替える" : "画像を追加"}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={imageProcessing} onChange={(e) => { void attachEventImage(e.currentTarget.files?.[0] ?? null); e.currentTarget.value = ""; }} /></label>{editing.imageDataUrl && <button type="button" className="secondary-button event-image-remove" disabled={imageProcessing} onClick={removeEventImage}>画像を削除</button>}{imageProcessing && <small>画像を準備しています…</small>}{imageError && <small className="event-image-error" role="alert">{imageError}</small>}<small>QRコードが読み取れるよう、PNGは画質を保って保存します。</small></div><label>メモ（任意）<textarea name="memo" rows={3} maxLength={2000} defaultValue={editing.memo} /></label><div className="form-actions">{events.some((e) => e.id === editing.id) && <button type="button" className="delete-button" onClick={() => void remove(editing.id)}>削除</button>}<button type="button" className="secondary-button" onClick={() => setEditing(null)}>キャンセル</button><button type="submit" className="save-button" disabled={imageProcessing}>{imageProcessing ? "画像処理中…" : "保存"}</button></div></form>
     </section></div>}
   </div>;
 }

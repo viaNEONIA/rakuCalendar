@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_EVENT_COLOR, DEFAULT_SETTINGS, EVENT_COLOR_PALETTE, getNextEventColor, isValidEvent } from "../src/domain/event";
+import { DEFAULT_EVENT_COLOR, DEFAULT_SETTINGS, EVENT_COLOR_PALETTE, getNextEventColor, isValidEvent, isValidEventImageDataUrl } from "../src/domain/event";
 
 const validEvent = {
   id: "event-1",
@@ -29,6 +29,13 @@ describe("calendar foundation", () => {
 
   it("accepts an event with a positive duration", () => {
     expect(isValidEvent(validEvent)).toBe(true);
+  });
+
+  it("accepts supported image data URLs and rejects invalid or oversized data", () => {
+    expect(isValidEventImageDataUrl("data:image/png;base64,aGVsbG8=")).toBe(true);
+    expect(isValidEventImageDataUrl("data:image/svg+xml;base64,PHN2Zz4=")).toBe(false);
+    expect(isValidEventImageDataUrl(`data:image/png;base64,${"a".repeat(7_000_000)}`)).toBe(false);
+    expect(isValidEvent({ ...validEvent, imageDataUrl: "data:image/png;base64,aGVsbG8=" })).toBe(true);
   });
 
   it("rejects empty titles and non-positive durations", () => {

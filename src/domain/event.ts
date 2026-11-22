@@ -7,6 +7,7 @@ export interface CalendarEvent {
   memo: string;
   color?: string;
   pinned?: boolean;
+  imageDataUrl?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -85,6 +86,10 @@ export const DEFAULT_SETTINGS: CalendarSettings = {
   backupReminderDays: 14
 };
 
+export function isValidEventImageDataUrl(value: unknown): value is string {
+  return typeof value === "string" && value.length <= 7_000_000 && /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(value);
+}
+
 export function isValidEvent(value: unknown): value is CalendarEvent {
   if (typeof value !== "object" || value === null) return false;
   const event = value as Partial<CalendarEvent>;
@@ -96,6 +101,7 @@ export function isValidEvent(value: unknown): value is CalendarEvent {
   if (typeof event.createdAt !== "string" || typeof event.updatedAt !== "string") return false;
   if (event.color !== undefined && typeof event.color !== "string") return false;
   if (event.pinned !== undefined && typeof event.pinned !== "boolean") return false;
+  if (event.imageDataUrl !== undefined && !isValidEventImageDataUrl(event.imageDataUrl)) return false;
   const start = Date.parse(event.startAt);
   const end = Date.parse(event.endAt);
   return Number.isFinite(start) && Number.isFinite(end) && Number.isFinite(Date.parse(event.createdAt)) && Number.isFinite(Date.parse(event.updatedAt)) && end > start;
