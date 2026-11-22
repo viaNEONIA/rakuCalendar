@@ -5,7 +5,8 @@ import { compressEventImage } from "./domain/eventImage";
 import type { CalendarEvent, CalendarSettings } from "./domain/event";
 import { makeBackup, parseBackup } from "./domain/backup";
 import type { CalendarBackup } from "./domain/backup";
-import { createICalendar } from "./domain/ical";
+import { createICalendar, parseICalendar } from "./domain/ical";
+import type { ICalendarImportResult } from "./domain/ical";
 import { changeEventTime, dayEvents, dateFromKey, dayKey, EVENT_TIME_INCREMENT_MINUTES, getNextEvent, layoutOverlaps, localDateTime, nearestQuarterHourMinute, defaultEventRange, hasPointerScrollIntent, nextAvailableEventRange, nextScheduledDay, previousScheduledDay, pointerScrollDelta, resolveDragOverlaps, snapMinutes, stepEventTimeOnQuarterGrid } from "./domain/time";
 import type { DragMode } from "./domain/time";
 import { deleteEvent, getSettings, listEvents, restoreData, saveEvent, saveSettings } from "./storage/database";
@@ -62,6 +63,7 @@ export function App() {
   const [settings, setSettings] = useState<CalendarSettings>(DEFAULT_SETTINGS);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [backupPreview, setBackupPreview] = useState<CalendarBackup | null>(null);
+  const [iCalendarPreview, setICalendarPreview] = useState<(ICalendarImportResult & { fileName: string }) | null>(null);
   const [restoreMode, setRestoreMode] = useState<"merge" | "replace">("merge");
   const [conflictPolicy, setConflictPolicy] = useState<"keep-local" | "use-backup">("keep-local");
   const [replaceConfirmed, setReplaceConfirmed] = useState(false);
@@ -256,12 +258,44 @@ export function App() {
     setSettingsMessage(`${selectedDay}の予定${todaysEvents.length}件をICSファイルに出力しました。カレンダーアプリからインポートしてください。`);
   }
 
+  async function readICalendarFile(file?: File) {
+    if (!file) return;
+    setICalendarPreview(null);
+    try {
+      if (file.size > 20_000_000) throw new Error("ICSファイルは20MB以下を選択してください。");
+      const preview = parseICalendar(await file.text());
+      setICalendarPreview({ ...preview, fileName: file.name });
+      setBackupPreview(null);
+      setSettingsMessage("");
+    } catch (error) {
+      setSettingsMessage(error instanceof Error ? error.message : "ICSファイルを読み取れませんでした。");
+    }
+  }
+
+  async function registerICalendarEvents() {
+    if (!iCalendarPreview || !iCalendarPreview.events.length) return;
+    try {
+      const imported: CalendarEvent[] = [];
+      for (const event of iCalendarPreview.events) {
+        imported.push({ ...event, color: getNextEventColor([...events, ...imported]) });
+      }
+      const result = await restoreData(imported, settings, "merge", "keep-local");
+      const savedEvents = await listEvents();
+      setEvents(savedEvents);
+      setICalendarPreview(null);
+      setSettingsMessage(`ICSを登録しました。追加 ${result.added}件、既存予定との重複・競合でスキップ ${result.skipped}件、未対応項目 ${iCalendarPreview.skippedCount}件。`);
+    } catch (error) {
+      setSettingsMessage(error instanceof Error ? error.message : "ICSの予定を登録できませんでした。");
+    }
+  }
+
   async function readBackup(file?: File) {
     if (!file) return;
     try {
       if (file.size > 20_000_000) throw new Error("ファイルサイズが20MBを超えています。");
       const backup = parseBackup(await file.text());
       setBackupPreview(backup);
+      setICalendarPreview(null);
       setRestoreMode("merge");
       setReplaceConfirmed(false);
       setSettingsMessage("");
@@ -487,8 +521,8 @@ export function App() {
     {mode === "edit" && <button className="add-button" aria-label="予定を追加" onClick={() => setEditing(makeInitialEvent(dateFromKey(selectedDay), new Date(), events))}>＋</button>}
     {undoVisible && <div className={`undo-bar${mode === "edit" && selectedEventId && visibleEvents.some((event) => event.id === selectedEventId) ? " has-time-controls" : ""}`} role="status"><span>時間を変更しました</span><button onClick={() => void travelHistory("undo")} disabled={historyIndex.current <= 0}>元に戻す</button><button onClick={() => void travelHistory("redo")} disabled={historyIndex.current >= history.current.length}>やり直す</button></div>}
 
-    {settingsOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) { setSettingsOpen(false); setBackupPreview(null); } }}><section className="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-      <div className="dialog-head"><h2 id="settings-title">設定</h2><button className="icon-button" aria-label="閉じる" onClick={() => { setSettingsOpen(false); setBackupPreview(null); }}>×</button></div>
+    {settingsOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) { setSettingsOpen(false); setBackupPreview(null); setICalendarPreview(null); } }}><section className="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div className="dialog-head"><h2 id="settings-title">設定</h2><button className="icon-button" aria-label="閉じる" onClick={() => { setSettingsOpen(false); setBackupPreview(null); setICalendarPreview(null); }}>×</button></div>
       
       <label className="setting-row">表示開始時刻<select value={settings.displayStartHour} onChange={(e) => { const start = Number(e.target.value); setSettings({ ...settings, displayStartHour: start, displayEndHour: Math.max(settings.displayEndHour, start + 1) }); }}>{Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{String(hour).padStart(2, "0")}:00</option>)}</select></label>
       <label className="setting-row">表示終了時刻<select value={settings.displayEndHour} onChange={(e) => { const end = Number(e.target.value); setSettings({ ...settings, displayEndHour: end, displayStartHour: Math.min(settings.displayStartHour, end - 1) }); }}>{Array.from({ length: 24 }, (_, index) => { const hour = index + 1; return <option key={hour} value={hour}>{hour === 24 ? "24:00" : `${String(hour).padStart(2, "0")}:00`}</option>; })}</select></label>
@@ -496,10 +530,11 @@ export function App() {
       <label className="setting-check"><input type="checkbox" checked={settings.showNextEvent} onChange={(e) => setSettings({ ...settings, showNextEvent: e.target.checked })} />次の予定を表示</label>
       <label className="setting-row">バックアップの注意間隔<select value={settings.backupReminderDays} onChange={(e) => setSettings({ ...settings, backupReminderDays: Number(e.target.value) as CalendarSettings["backupReminderDays"] })}><option value={0}>オフ</option><option value={7}>7日</option><option value={14}>14日</option><option value={30}>30日</option></select></label>
       <div className="backup-section"><h3>バックアップと復元</h3><p>予定と設定をJSONに保存します。ファイルの保存完了ではなく作成日時を記録します。</p><button className="save-button wide-button" onClick={() => void exportBackup()}>バックアップを作成</button><div className="backup-meta">最終作成日時: {settings.lastBackupCreatedAt ? new Date(settings.lastBackupCreatedAt).toLocaleString("ja-JP") : "未作成"}</div><label className="file-picker">バックアップファイルを選択<input type="file" accept="application/json,.json" onChange={(e) => void readBackup(e.target.files?.[0])} /></label></div>
-      <div className="backup-section"><h3>外部カレンダー</h3><p>{selectedDay}の予定{todaysEvents.length}件をiCalendar形式で保存します。Google Calendar、Outlook、Apple Calendarなどにインポートできます。</p><button className="secondary-button wide-button" onClick={exportICalendar}>この日の予定をICS出力</button></div>
+      <div className="backup-section"><h3>外部カレンダー</h3><p>{selectedDay}の予定{todaysEvents.length}件をiCalendar形式で保存します。Google Calendar、Outlook、Apple Calendarなどにインポートできます。</p><button className="secondary-button wide-button" onClick={exportICalendar}>この日の予定をICS出力</button><label className="file-picker">ICSファイルを読み込む<input type="file" accept=".ics,text/calendar" onChange={(e) => { const file = e.currentTarget.files?.[0]; e.currentTarget.value = ""; void readICalendarFile(file); }} /></label></div>
+      {iCalendarPreview && <div className="restore-preview ical-preview"><h3>ICS取込内容の確認</h3><p>{iCalendarPreview.fileName}</p><p>登録可能: {iCalendarPreview.events.length}件 · 未対応のためスキップ: {iCalendarPreview.skippedCount}件</p><p>既存予定とUIDが重複する項目や同じUIDで内容が異なる項目は登録時にスキップします。</p>{iCalendarPreview.events.length > 0 && <ul className="ical-preview-list">{iCalendarPreview.events.slice(0, 5).map((event) => <li key={event.id}><strong>{event.title}</strong><span>{new Date(event.startAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}–{new Date(event.endAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</span></li>)}</ul>}{iCalendarPreview.events.length > 5 && <p>ほか {iCalendarPreview.events.length - 5}件</p>}{iCalendarPreview.warnings.length > 0 && <details><summary>スキップ理由を確認</summary><ul>{iCalendarPreview.warnings.slice(0, 20).map((warning, index) => <li key={index}>{warning}</li>)}</ul>{iCalendarPreview.warnings.length > 20 && <p>ほか {iCalendarPreview.warnings.length - 20}件</p>}</details>}<div className="form-actions"><button className="secondary-button" onClick={() => setICalendarPreview(null)}>キャンセル</button><button className="save-button" disabled={!iCalendarPreview.events.length} onClick={() => void registerICalendarEvents()}>予定を追加登録</button></div></div>}
       {backupPreview && <div className="restore-preview"><h3>復元内容の確認</h3><p>{backupPreview.events.length}件の予定 · {new Date(backupPreview.exportedAt).toLocaleString("ja-JP")}作成 · {backupPreview.timezone}</p><label className="setting-check"><input type="radio" checked={restoreMode === "merge"} onChange={() => setRestoreMode("merge")} />既存を残して追加・統合</label><label className="setting-check"><input type="radio" checked={restoreMode === "replace"} onChange={() => setRestoreMode("replace")} />全件置き換え</label>{restoreMode === "merge" && <fieldset><legend>同じIDで内容が異なる予定</legend><label><input type="radio" checked={conflictPolicy === "keep-local"} onChange={() => setConflictPolicy("keep-local")} />端末の予定を残す</label><label><input type="radio" checked={conflictPolicy === "use-backup"} onChange={() => setConflictPolicy("use-backup")} />バックアップで更新</label></fieldset>}{restoreMode === "replace" && <label className="setting-check replace-warning"><input type="checkbox" checked={replaceConfirmed} onChange={(e) => setReplaceConfirmed(e.target.checked)} />現在の予定と設定を置き換えることを確認しました</label>}<button className="save-button wide-button" disabled={restoreMode === "replace" && !replaceConfirmed} onClick={() => void restoreBackup()}>復元を実行</button></div>}
       {settingsMessage && <p className="settings-message" role="status">{settingsMessage}</p>}
-      <button className="secondary-button settings-done" onClick={() => { setSettingsOpen(false); setBackupPreview(null); }}>閉じる</button>
+      <button className="secondary-button settings-done" onClick={() => { setSettingsOpen(false); setBackupPreview(null); setICalendarPreview(null); }}>閉じる</button>
     </section></div>}
 
     {viewingEvent && <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setViewingEvent(null); }}><section className="event-dialog" role="dialog" aria-modal="true" aria-labelledby="view-event-title"><div className="dialog-head"><h2 id="view-event-title">予定の詳細</h2><button className="icon-button" onClick={() => setViewingEvent(null)} aria-label="閉じる">×</button></div><div className="event-details"><strong>{viewingEvent.title}</strong><p>{new Date(viewingEvent.startAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" })}–{formatTime(viewingEvent.endAt)}</p>{viewingEvent.destination && <p>行先: {viewingEvent.destination}</p>}{viewingEvent.memo && <p className="event-detail-memo">{viewingEvent.memo}</p>}{viewingEvent.imageDataUrl && <img className="event-image-preview detail-event-image" src={viewingEvent.imageDataUrl} alt={`${viewingEvent.title}の添付画像`} />}<button className="secondary-button settings-done" onClick={() => void togglePinned(viewingEvent)}>{viewingEvent.pinned ? "ピン留めを解除" : "📌 ピン留め"}</button><button className="secondary-button settings-done" onClick={() => setViewingEvent(null)}>閉じる</button></div></section></div>}

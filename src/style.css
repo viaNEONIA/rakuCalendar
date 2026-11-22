@@ -146,3 +146,10 @@ button { touch-action: manipulation; }
 .event-image-remove { margin-left: 0; min-height: 44px; }
 .event-image-field small { color: #68758e; font-size: 12px; }
 .event-image-field .event-image-error { color: #b42332; }
+
+.ical-preview-list { display: grid; gap: 7px; margin: 10px 0; padding: 0; list-style: none; }
+.ical-preview-list li { display: grid; gap: 2px; padding: 9px 11px; border-radius: 10px; background: #f4f6fb; }
+.ical-preview-list li strong { color: #26334f; font-size: 13px; }
+.ical-preview-list li span { color: #68758e; font-size: 12px; }
+.ical-preview details { margin: 10px 0; color: #53617b; font-size: 12px; }
+.ical-preview details ul { max-height: 160px; overflow: auto; padding-left: 20px; }
