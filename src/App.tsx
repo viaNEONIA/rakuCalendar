@@ -68,6 +68,8 @@ export function App() {
   const [conflictPolicy, setConflictPolicy] = useState<"keep-local" | "use-backup">("keep-local");
   const [replaceConfirmed, setReplaceConfirmed] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState("");
+  const [icsExport, setIcsExport] = useState<{ url: string; file: File } | null>(null);
+  const [icsSharing, setIcsSharing] = useState(false);
   const [imageProcessing, setImageProcessing] = useState(false);
   const [imageError, setImageError] = useState("");
   const [dragPreview, setDragPreview] = useState<DragPreview | null>(null);
@@ -246,16 +248,42 @@ export function App() {
     setSettingsMessage("バックアップファイルを作成しました。保存先でファイルを確認してください。");
   }
 
+  useEffect(() => {
+    return () => { if (icsExport) URL.revokeObjectURL(icsExport.url); };
+  }, [icsExport]);
+
   function exportICalendar() {
     if (!todaysEvents.length) { setSettingsMessage("この日に出力できる予定はありません。"); return; }
-    const blob = new Blob([createICalendar(todaysEvents)], { type: "text/calendar;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `rakuCalendar-${selectedDay.replaceAll("-", "")}.ics`;
-    anchor.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setSettingsMessage(`${selectedDay}の予定${todaysEvents.length}件をICSファイルに出力しました。カレンダーアプリからインポートしてください。`);
+    try {
+      const file = new File([createICalendar(todaysEvents)], `rakuCalendar-${selectedDay.replaceAll("-", "")}.ics`, { type: "text/calendar" });
+      const url = URL.createObjectURL(file);
+      setIcsExport({ url, file });
+      setSettingsMessage("ICSファイルを準備しました。iPhoneでは下の「ICSを共有」または「ICSを保存」をタップしてください。");
+    } catch (error) {
+      setSettingsMessage(error instanceof Error ? `ICS作成失敗: ${error.message}` : "ICSファイルを作成できませんでした。");
+    }
+  }
+
+  async function shareICalendar() {
+    if (!icsExport || icsSharing) return;
+    if (!navigator.share || !navigator.canShare?.({ files: [icsExport.file] })) {
+      setSettingsMessage("この環境はICSファイル共有に対応していません。「ICSを保存」をお試しください。");
+      return;
+    }
+    setIcsSharing(true);
+    try {
+      await navigator.share({ files: [icsExport.file] });
+      setSettingsMessage("共有操作が完了しました。共有先で添付・保存されたことを確認してください。");
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setSettingsMessage("ICSの共有をキャンセルしました。");
+      } else {
+        const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+        setSettingsMessage(`ICS共有に失敗しました（${detail}）。「ICSを保存」もお試しください。`);
+      }
+    } finally {
+      setIcsSharing(false);
+    }
   }
 
   async function readICalendarFile(file?: File) {
@@ -530,7 +558,7 @@ export function App() {
       <label className="setting-check"><input type="checkbox" checked={settings.showNextEvent} onChange={(e) => setSettings({ ...settings, showNextEvent: e.target.checked })} />次の予定を表示</label>
       <label className="setting-row">バックアップの注意間隔<select value={settings.backupReminderDays} onChange={(e) => setSettings({ ...settings, backupReminderDays: Number(e.target.value) as CalendarSettings["backupReminderDays"] })}><option value={0}>オフ</option><option value={7}>7日</option><option value={14}>14日</option><option value={30}>30日</option></select></label>
       <div className="backup-section"><h3>バックアップと復元</h3><p>予定と設定をJSONに保存します。ファイルの保存完了ではなく作成日時を記録します。</p><button className="save-button wide-button" onClick={() => void exportBackup()}>バックアップを作成</button><div className="backup-meta">最終作成日時: {settings.lastBackupCreatedAt ? new Date(settings.lastBackupCreatedAt).toLocaleString("ja-JP") : "未作成"}</div><label className="file-picker">バックアップファイルを選択<input type="file" accept="application/json,.json" onChange={(e) => void readBackup(e.target.files?.[0])} /></label></div>
-      <div className="backup-section"><h3>外部カレンダー</h3><p>{selectedDay}の予定{todaysEvents.length}件をiCalendar形式で保存します。Google Calendar、Outlook、Apple Calendarなどにインポートできます。</p><button className="secondary-button wide-button" onClick={exportICalendar}>この日の予定をICS出力</button><label className="file-picker">ICSファイルを読み込む<input type="file" accept=".ics,text/calendar" onChange={(e) => { const file = e.currentTarget.files?.[0]; e.currentTarget.value = ""; void readICalendarFile(file); }} /></label></div>
+      <div className="backup-section"><h3>外部カレンダー</h3><p>{selectedDay}の予定{todaysEvents.length}件をiCalendar形式で保存します。Google Calendar、Outlook、Apple Calendarなどにインポートできます。</p><button className="secondary-button wide-button" onClick={exportICalendar}>この日のICSファイルを準備</button>{icsExport && <div className="ics-export-actions"><button className="secondary-button wide-button" onClick={() => void shareICalendar()} disabled={icsSharing}>{icsSharing ? "共有中…" : "ICSを共有（メール・ファイル）"}</button><a className="secondary-button wide-button" href={icsExport.url} download={icsExport.file.name}>ICSを保存（ダウンロード）</a><p>iPhoneでは「ICSを共有」から「ファイルに保存」またはメールアプリを選択してください。共有できない場合は保存リンクを試してください。</p></div>}<label className="file-picker">ICSファイルを読み込む<input type="file" accept=".ics,text/calendar" onChange={(e) => { const file = e.currentTarget.files?.[0]; e.currentTarget.value = ""; void readICalendarFile(file); }} /></label></div>
       {iCalendarPreview && <div className="restore-preview ical-preview"><h3>ICS取込内容の確認</h3><p>{iCalendarPreview.fileName}</p><p>登録可能: {iCalendarPreview.events.length}件 · 未対応のためスキップ: {iCalendarPreview.skippedCount}件</p><p>既存予定とUIDが重複する項目や同じUIDで内容が異なる項目は登録時にスキップします。</p>{iCalendarPreview.events.length > 0 && <ul className="ical-preview-list">{iCalendarPreview.events.slice(0, 5).map((event) => <li key={event.id}><strong>{event.title}</strong><span>{new Date(event.startAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}–{new Date(event.endAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</span></li>)}</ul>}{iCalendarPreview.events.length > 5 && <p>ほか {iCalendarPreview.events.length - 5}件</p>}{iCalendarPreview.warnings.length > 0 && <details><summary>スキップ理由を確認</summary><ul>{iCalendarPreview.warnings.slice(0, 20).map((warning, index) => <li key={index}>{warning}</li>)}</ul>{iCalendarPreview.warnings.length > 20 && <p>ほか {iCalendarPreview.warnings.length - 20}件</p>}</details>}<div className="form-actions"><button className="secondary-button" onClick={() => setICalendarPreview(null)}>キャンセル</button><button className="save-button" disabled={!iCalendarPreview.events.length} onClick={() => void registerICalendarEvents()}>予定を追加登録</button></div></div>}
       {backupPreview && <div className="restore-preview"><h3>復元内容の確認</h3><p>{backupPreview.events.length}件の予定 · {new Date(backupPreview.exportedAt).toLocaleString("ja-JP")}作成 · {backupPreview.timezone}</p><label className="setting-check"><input type="radio" checked={restoreMode === "merge"} onChange={() => setRestoreMode("merge")} />既存を残して追加・統合</label><label className="setting-check"><input type="radio" checked={restoreMode === "replace"} onChange={() => setRestoreMode("replace")} />全件置き換え</label>{restoreMode === "merge" && <fieldset><legend>同じIDで内容が異なる予定</legend><label><input type="radio" checked={conflictPolicy === "keep-local"} onChange={() => setConflictPolicy("keep-local")} />端末の予定を残す</label><label><input type="radio" checked={conflictPolicy === "use-backup"} onChange={() => setConflictPolicy("use-backup")} />バックアップで更新</label></fieldset>}{restoreMode === "replace" && <label className="setting-check replace-warning"><input type="checkbox" checked={replaceConfirmed} onChange={(e) => setReplaceConfirmed(e.target.checked)} />現在の予定と設定を置き換えることを確認しました</label>}<button className="save-button wide-button" disabled={restoreMode === "replace" && !replaceConfirmed} onClick={() => void restoreBackup()}>復元を実行</button></div>}
       {settingsMessage && <p className="settings-message" role="status">{settingsMessage}</p>}
