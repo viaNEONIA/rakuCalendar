@@ -123,8 +123,8 @@ describe("calendar viewing and editing modes", () => {
     await click(container.querySelector(".add-button"));
     const timeInputs = Array.from(container.querySelectorAll<HTMLInputElement>('input[name="startHour"], input[name="startMinute"], input[name="endHour"], input[name="endMinute"]'));
     expect(timeInputs.map((input) => input.type)).toEqual(["number", "number", "number", "number"]);
-    expect(container.querySelector<HTMLInputElement>('input[name="startMinute"]')?.step).toBe("15");
-    expect(container.querySelector<HTMLInputElement>('input[name="endMinute"]')?.step).toBe("15");
+    expect(container.querySelector<HTMLInputElement>('input[name="startMinute"]')?.step).toBe("1");
+    expect(container.querySelector<HTMLInputElement>('input[name="endMinute"]')?.step).toBe("1");
     const startMinute = Number(container.querySelector<HTMLInputElement>('input[name="startHour"]')?.value) * 60 + Number(container.querySelector<HTMLInputElement>('input[name="startMinute"]')?.value);
     const endMinute = Number(container.querySelector<HTMLInputElement>('input[name="endHour"]')?.value) * 60 + Number(container.querySelector<HTMLInputElement>('input[name="endMinute"]')?.value);
     expect(endMinute - startMinute).toBe(30);
